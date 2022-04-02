@@ -24,6 +24,8 @@ namespace ConsoleIgo
 
         // 碁盤サイズ
         const int BoardSize = 9 + 2;  // n 路 ＋ 2(外周盤外用)
+        // コミ
+        const int komi = 6;     // 持碁の場合は 白に+0.5 あるとして、白勝ちとする;
         // 手番と座標の構造体
         public struct KiFu {
             public int Col;
@@ -43,6 +45,7 @@ namespace ConsoleIgo
         static int numStone;                                    // 連の石数(チェック用碁盤用)
 
         static bool endFlag = false;                            // パス2回連続したらtrue
+        static Random rand = new Random();
 
         /******************************************************************************/
         static void Main(string[] args)
@@ -81,7 +84,7 @@ namespace ConsoleIgo
                     score = CountScore();
                          if (score > 0) { Console.WriteLine("黒の勝ち！！"); }
                     else if (score < 0) { Console.WriteLine("白の勝ち！！"); }
-                    else                { Console.WriteLine("引き分けです。"); }
+                    else                { Console.WriteLine("持碁！白の勝ち！"); }
                     Console.ReadKey();
                     break;
                 }
@@ -137,8 +140,12 @@ namespace ConsoleIgo
             Point input = new Point(999, 999);
             while (true)
             {
-                // 着手座標をキー入力
-                InputCoordinate(color, ref input);
+                if(color == Black) {
+                    // 着手座標をキー入力
+                    InputCoordinate(color, ref input);
+                } else {
+                    RandomXY(ref input);
+                }
 
                 if ((input.X > 0 && input.X < BoardSize - 1) &&
                     (input.Y > 0 && input.Y < BoardSize - 1))   // 座標が適正か？
@@ -358,10 +365,10 @@ namespace ConsoleIgo
             DispGoban();
             Console.WriteLine("------結果-------");
             Console.WriteLine($"黒地{bScore}+黒浜{prisoner[Black]}");
-            Console.WriteLine($"白地{wScore}+白浜{prisoner[White]}");
+            Console.WriteLine($"白地{wScore}+白浜{prisoner[White]}+コミ{komi}.5");
 
             bScore += prisoner[Black];
-            wScore += prisoner[White];
+            wScore += prisoner[White] + komi;
             return bScore - wScore;
         }
 
@@ -455,6 +462,14 @@ namespace ConsoleIgo
         {
             KiFu kifu = new KiFu() { Col = color, Poi = p };
             kifuLog.Add(kifu);
+        }
+
+        /******************************************************************************/
+        // 思考エンジン（ランダムな ｘ、ｙ）
+        static void RandomXY(ref Point p)
+        {
+            p.X = rand.Next(1, BoardSize - 1);
+            p.Y = rand.Next(1, BoardSize - 1);
         }
     }
 }
