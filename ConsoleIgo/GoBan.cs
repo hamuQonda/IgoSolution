@@ -286,7 +286,7 @@ namespace ConsoleIgo
         static void KeSu(int x, int y, int color)
         {
             goban[y, x] = Space;    // 座標の石を消す
-            // 隣の石が同じ色なら、消す
+            // 隣の石が同じ色なら、再帰で消す
             if (goban[y, x - 1] == color) { KeSu(x - 1, y, color); }    // 左
             if (goban[y, x + 1] == color) { KeSu(x + 1, y, color); }    // 右
             if (goban[y - 1, x] == color) { KeSu(x, y - 1, color); }    // 上
