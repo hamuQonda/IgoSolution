@@ -23,7 +23,7 @@ namespace ConsoleIgo
         static int[] countMk = new int[9];   // 交点の状態のカウンタ 
 
         // 碁盤サイズ
-        const int BoardSize = 9 + 2;  // n 路 ＋ 2(外周盤外用)
+        const int BoardSize = 5 + 2;  // n 路 ＋ 2(外周盤外用)
         // コミ
         const int komi = 6;     // 持碁の場合は 白に+0.5 あるとして、白勝ちとする;
         // 手番と座標の構造体
@@ -140,11 +140,13 @@ namespace ConsoleIgo
             Point input = new Point(999, 999);
             while (true)
             {
-                if(color == Black) {
+                if (color == Black) {
                     // 着手座標をキー入力
                     InputCoordinate(color, ref input);
-                } else {
-                    RandomXY(ref input);
+                }
+                else {
+                    // 白は乱数で座標を決める
+                    RandomXY(color, ref input);
                 }
 
                 if ((input.X > 0 && input.X < BoardSize - 1) &&
@@ -198,7 +200,14 @@ namespace ConsoleIgo
             }
             if (CheckSuicide(color, p)) { return false; }                               // 自殺手なら置けない
 
-            //以上のチェックを通過したので、
+            // 以上のチェックを通過したので、合法手だが、
+            // 乱数打ちの場合、自分の目を埋める手は禁止しておく
+            if ((goban[p.Y, p.X - 1] == color || goban[p.Y, p.X - 1] == Outsd) &&
+                (goban[p.Y, p.X + 1] == color || goban[p.Y, p.X + 1] == Outsd) &&
+                (goban[p.Y - 1, p.X] == color || goban[p.Y - 1, p.X] == Outsd) &&
+                (goban[p.Y + 1, p.X] == color || goban[p.Y + 1, p.X] == Outsd))
+            { return false; }
+
             return true;// 置けます
         }
 
@@ -447,8 +456,8 @@ namespace ConsoleIgo
                 koNum = move; // コウが発生した手数を記録、コウの座標を記録
                      if (prisonerW == 1) { ko.X = p.X - 1; ko.Y = p.Y; }
                 else if (prisonerE == 1) { ko.X = p.X + 1; ko.Y = p.Y; }
-                else if (prisonerE == 1) { ko.X = p.X + 1; ko.Y = p.Y; }
-                else if (prisonerE == 1) { ko.X = p.X + 1; ko.Y = p.Y; }
+                else if (prisonerN == 1) { ko.X = p.X; ko.Y = p.Y - 1; }
+                else if (prisonerS == 1) { ko.X = p.X; ko.Y = p.Y + 1; }
             }
 
             // アゲハマの更新
@@ -466,10 +475,26 @@ namespace ConsoleIgo
 
         /******************************************************************************/
         // 思考エンジン（ランダムな ｘ、ｙ）
-        static void RandomXY(ref Point p)
+        static void RandomXY(int color, ref Point p)
         {
-            p.X = rand.Next(1, BoardSize - 1);
-            p.Y = rand.Next(1, BoardSize - 1);
+            // すべての空点を調べ、合法な空点が無ければ、パス
+            var countM = 0; // 合法な（石を置くことが可能な）空点をカウントする変数
+            for (int i = 1; i < BoardSize - 1; i++) for (int j = 1; j < BoardSize - 1; j++)
+                {
+                    if (goban[i, j] != Space) continue; // 空点以外はスキップ
+                    // 空点なら以下
+                    p.X = j; p.Y = i;
+                    if (CheckLegal(color, p)) countM++; // 合法ならカウント＋１
+                }
+            if(countM > 0) { 
+                // 置ける空点がある
+                p.X = rand.Next(1, BoardSize - 1);
+                p.Y = rand.Next(1, BoardSize - 1);
+            }
+            else
+            {   // 置ける空点が無い
+                p.X = 0; p.Y = 0;                   // パス
+            }
         }
     }
 }
