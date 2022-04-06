@@ -23,9 +23,11 @@ namespace ConsoleIgo
         static int[] countMk = new int[9];   // 交点の状態のカウンタ 
 
         // 碁盤サイズ
-        const int BoardSize = 5 + 2;  // n 路 ＋ 2(外周盤外用)
+        static int boardSize;   // n 路 ＋ 2(盤外用)
         // コミ
-        const int komi = 6;     // 持碁の場合は 白に+0.5 あるとして、白勝ちとする;
+        static int komi = 6;     // 持碁の場合は 白に+0.5 として、白勝ちとする;
+        // プレイヤー
+        static string[] player = new string[3];         // player[Black], player[White] に com hum 
         // 手番と座標の構造体
         public struct KiFu {
             public int Col;
@@ -33,23 +35,25 @@ namespace ConsoleIgo
         }
         //                      0空点,1黒石,2白石,3盤外,4黒死,5白死,6ダメ,7黒地,8白地     // 4以上はマークの主な用途
         static char[] banChr = { '＋', '○', '●', '？', '▽', '▼', '×', '◇', '◆' };  // コンソール碁盤表示用文字
-        static int[,] goban = new int[BoardSize, BoardSize];    // 碁盤配列
-        static int move;                                        // 手数
-        static int[] prisoner = new int[3];                     // アゲハマ、prizoner[Black], prizoner[White]
-        static Point ko;                                        // 劫の位置
-        static int koNum;                                       // コウが発生した手数
+        static int[,] goban;                            // 碁盤配列
+        static int move;                                // 手数
+        static int[] prisoner = new int[3];             // アゲハマ、prizoner[Black], prizoner[White]
+        static Point ko;                                // 劫の位置
+        static int koNum;                               // コウが発生した手数
         static List<KiFu> kifuLog = new List<KiFu>();
 
-        static int[,] chkGoban = new int[BoardSize, BoardSize]; // チェック用碁盤配列
-        static int numSpace;                                    // 空点の数(チェック用碁盤用)
-        static int numStone;                                    // 連の石数(チェック用碁盤用)
+        static int[,] chkGoban;                         // チェック用碁盤配列
+        static int numSpace;                            // 空点の数(チェック用碁盤用)
+        static int numStone;                            // 連の石数(チェック用碁盤用)
 
-        static bool endFlag = false;                            // パス2回連続したらtrue
+        static bool endFlag = false;                    // パス2回連続したらtrue
         static Random rand = new Random();
+
 
         /******************************************************************************/
         static void Main(string[] args)
         {
+            GameSettings();                                 // 対局の設定
             int movColor = White;                           // 直前の手番の色
             Point movePoint = new Point(999, 999);          // 着手位置
             Point previousMovePoint = new Point(999, 999);  // ひとつ前の着手位置
@@ -71,7 +75,7 @@ namespace ConsoleIgo
                 ThinkMove(movColor, ref movePoint);
 
                 // 盤サイズより大きい座標なら、投了
-                if (movePoint.X > BoardSize - 2 || movePoint.Y > BoardSize - 2) {
+                if (movePoint.X > boardSize - 2 || movePoint.Y > boardSize - 2) {
                     string msgToRyo = (movColor == Black) ? "白の勝ち！ 黒は投了しました。" : "黒の勝ち！ 白は投了しました。";
                     Console.WriteLine(msgToRyo);
                     Console.ReadKey();
@@ -82,6 +86,7 @@ namespace ConsoleIgo
                 if ((movePoint.X < 1 || movePoint.Y < 1) && (previousMovePoint.X < 1 || previousMovePoint.Y < 1)) {
                     endFlag = true;
                     score = CountScore();
+                    Console.Write((double)(score - 0.5) + "目、");
                          if (score > 0) { Console.WriteLine("黒の勝ち！！"); }
                     else if (score < 0) { Console.WriteLine("白の勝ち！！"); }
                     else                { Console.WriteLine("持碁！白の勝ち！"); }
@@ -104,16 +109,56 @@ namespace ConsoleIgo
         }
 
         /******************************************************************************/
+        // 対局の設定
+        private static void GameSettings()
+        {
+            while (true)
+            {
+                Console.Write("盤の大きさ(5,9,13,19) = ");
+                var gobanSizeStr = Console.ReadLine();
+                if (gobanSizeStr == "5" || gobanSizeStr == "9" || gobanSizeStr == "13" || gobanSizeStr == "19")
+                {
+                    boardSize = int.Parse(gobanSizeStr) + 2;
+                    goban = new int[boardSize, boardSize];
+                    chkGoban = new int[boardSize, boardSize];
+                    break;
+                }
+                Console.WriteLine("err!");
+            }
+            while (true)
+            {
+                Console.Write("黒番( 1:人 or 2:ｺﾝﾋﾟｭｰﾀ) = ");
+                var numStr = Console.ReadLine();
+                if (numStr == "1" || numStr == "2")
+                {
+                    player[Black] = numStr == "1" ? "Hum" : "Com";
+                    break;
+                }
+                Console.WriteLine("err!");
+            }
+            while (true)
+            {
+                Console.Write("白番( 1:人 or 2:ｺﾝﾋﾟｭｰﾀ) = ");
+                var numStr = Console.ReadLine();
+                if (numStr == "1" || numStr == "2")
+                {
+                    player[White] = numStr == "1" ? "Hum" : "Com";
+                    break;
+                }
+                Console.WriteLine("err!");
+            }
+        }
+        /******************************************************************************/
         // 碁盤の初期化
         static void InitializeBoard()
         {
-            goban = new int[BoardSize, BoardSize];
-            for (int i = 0; i < BoardSize; i++)
+            goban = new int[boardSize, boardSize];
+            for (int i = 0; i < boardSize; i++)
             {
                 goban[0, i] = 3;
                 goban[i, 0] = 3;
-                goban[BoardSize - 1, i] = 3;
-                goban[i, BoardSize - 1] = 3;
+                goban[boardSize - 1, i] = 3;
+                goban[i, boardSize - 1] = 3;
             }
         }
 
@@ -121,12 +166,11 @@ namespace ConsoleIgo
         // 碁盤の表示
         static void DispGoban()
         {
-            Console.WriteLine("    1 2 3 4 5 6 7 8 910111213141516171819".Substring(0, (BoardSize - 2) * 2 + 3));
-            for (int i = 1; i < BoardSize - 1; i++)
-            {
+            Console.Clear();
+            Console.WriteLine("    1 2 3 4 5 6 7 8 910111213141516171819".Substring(0, (boardSize - 2) * 2 + 3));
+            for (int i = 1; i < boardSize - 1; i++) {
                 Console.Write($"{i,2} ");
-                for (int j = 1; j < BoardSize - 1; j++)
-                {
+                for (int j = 1; j < boardSize - 1; j++) {
                     Console.Write(banChr[goban[i, j]]);
                 }
                 Console.WriteLine();
@@ -140,18 +184,15 @@ namespace ConsoleIgo
             Point input = new Point(999, 999);
             while (true)
             {
-                if (color == Black) {
-                    // 着手座標をキー入力
-                    InputCoordinate(color, ref input);
+                if (player[color]=="Hum") {             // プレイヤーが人間なら
+                    InputCoordinate(color, ref input);  // 着手座標をキー入力
                 }
-                else {
-                    // 白は乱数で座標を決める
-                    RandomXY(color, ref input);
+                else {                                  // プレイヤーはコンピュータ
+                    RandomXY(color, ref input);         // 思考エンジン（今は乱数）
                 }
 
-                if ((input.X > 0 && input.X < BoardSize - 1) &&
-                    (input.Y > 0 && input.Y < BoardSize - 1))   // 座標が適正か？
-                {
+                if ((input.X > 0 && input.X < boardSize - 1) &&  // 座標が適正か？
+                    (input.Y > 0 && input.Y < boardSize - 1)) {
                     // 合法手ならwhileループを抜ける
                     if (CheckLegal(color, input)) { break; }
                 }
@@ -182,8 +223,8 @@ namespace ConsoleIgo
                 var sY = str.Split(',')[1];
                 if (!int.TryParse(sX, out int x))  continue;  // 整数でなければ再入力
                 if (!int.TryParse(sY, out int y))  continue;  // 整数でなければ再入力
-                if (x < 1 || x > BoardSize - 2)    continue;  // 範囲外なら再入力
-                if (y < 1 || y > BoardSize - 2)    continue;  // 範囲外なら再入力
+                if (x < 1 || x > boardSize - 2)    continue;  // 範囲外なら再入力
+                if (y < 1 || y > boardSize - 2)    continue;  // 範囲外なら再入力
                 keyIn.X = x;
                 keyIn.Y = y;
                 break;
@@ -201,14 +242,49 @@ namespace ConsoleIgo
             if (CheckSuicide(color, p)) { return false; }                               // 自殺手なら置けない
 
             // 以上のチェックを通過したので、合法手だが、
-            // 乱数打ちの場合、自分の目を埋める手は禁止しておく
+            // 乱数打ちの場合、自分の目を埋める手は禁止しておくが、
             if ((goban[p.Y, p.X - 1] == color || goban[p.Y, p.X - 1] == Outsd) &&
                 (goban[p.Y, p.X + 1] == color || goban[p.Y, p.X + 1] == Outsd) &&
                 (goban[p.Y - 1, p.X] == color || goban[p.Y - 1, p.X] == Outsd) &&
                 (goban[p.Y + 1, p.X] == color || goban[p.Y + 1, p.X] == Outsd))
-            { return false; }
-
+            {
+                // 手数が盤サイズの二乗を超えたら、コウの形を埋めるのはOK
+                if (move > (boardSize - 1)* (boardSize - 1)) {
+                    if (KoKaisho(color, p)) return true;// 置けます
+                    return false;
+                }
+            }
             return true;// 置けます
+        }
+
+        /******************************************************************************/
+        // 周囲に解消できるコウがあるか？？
+        private static bool KoKaisho(int color, Point p)
+        {
+            if (KoNoKatati(color, p.X - 1, p.Y)) { return true; } // 左
+            if (KoNoKatati(color, p.X + 1, p.Y)) { return true; } // 右
+            if (KoNoKatati(color, p.X, p.Y - 1)) { return true; } // 上
+            if (KoNoKatati(color, p.X, p.Y + 1)) { return true; } // 下
+            return false;
+        }
+
+        /******************************************************************************/
+        // コウの形？
+        private static bool KoNoKatati(int color, int x, int y)
+        {
+            if (goban[y, x] == Outsd) return false;
+            // 周囲の 相手石or壁を、カウント＋１
+            for (int i = 0; i < 9; i++) { countMk[i] = 0; }         // カウンタを初期化０
+            countMk[goban[y, x + 1]]++;  // 右
+            countMk[goban[y - 1, x]]++;  // 上
+            countMk[goban[y + 1, x]]++;  // 下
+            countMk[goban[y, x - 1]]++;  // 左
+
+            // 相手の石と壁で3方向囲まれていれば、コウの形
+            if (countMk[3 - color] + countMk[Outsd] == 3) {
+                return true; 
+            }
+            return false;
         }
 
         /******************************************************************************/
@@ -341,16 +417,16 @@ namespace ConsoleIgo
 
             DeadStones();   // 盤上の死に石数をアゲハマへ追加する
             // 死に石を消す
-            for (int y =1; y < BoardSize - 1; y++) for (int x = 1; x < BoardSize - 1; x++)
+            for (int y =1; y < boardSize - 1; y++) for (int x = 1; x < boardSize - 1; x++)
                 {
                     if(goban[y, x] == 4 || goban[y, x] == 5) { goban[y, x] = Space; }
                 }
             DispGoban();
 
             // 陣地を数える
-            for (int y = 1; y < BoardSize - 1; y++)
+            for (int y = 1; y < boardSize - 1; y++)
             {
-                for (int x = 1; x < BoardSize - 1; x++)
+                for (int x = 1; x < boardSize - 1; x++)
                 {
                     if (goban[y, x] != Space) { continue; }  // 空点でなければスキップ
 
@@ -462,7 +538,7 @@ namespace ConsoleIgo
 
             // アゲハマの更新
             prisoner[color] += prisonerAll;
-            Console.WriteLine($"アゲハマ：{prisonerAll}(合計：{prisoner[color]})");
+            //Console.WriteLine($"アゲハマ：{prisonerAll}(合計：{prisoner[color]})");
         }
 
         /******************************************************************************/
@@ -479,7 +555,7 @@ namespace ConsoleIgo
         {
             // すべての空点を調べ、合法な空点が無ければ、パス
             var countM = 0; // 合法な（石を置くことが可能な）空点をカウントする変数
-            for (int i = 1; i < BoardSize - 1; i++) for (int j = 1; j < BoardSize - 1; j++)
+            for (int i = 1; i < boardSize - 1; i++) for (int j = 1; j < boardSize - 1; j++)
                 {
                     if (goban[i, j] != Space) continue; // 空点以外はスキップ
                     // 空点なら以下
@@ -488,8 +564,8 @@ namespace ConsoleIgo
                 }
             if(countM > 0) { 
                 // 置ける空点がある
-                p.X = rand.Next(1, BoardSize - 1);
-                p.Y = rand.Next(1, BoardSize - 1);
+                p.X = rand.Next(1, boardSize - 1);
+                p.Y = rand.Next(1, boardSize - 1);
             }
             else
             {   // 置ける空点が無い
