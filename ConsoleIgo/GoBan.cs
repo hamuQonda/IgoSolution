@@ -12,8 +12,8 @@ namespace ConsoleIgo
     {
         // 交点の状態
         const int Space = 0;    // 空点
-        const int Black = 1;    // 黒
-        const int White = 2;    // 白
+        const int Black = 1;    // 黒石
+        const int White = 2;    // 白石
         const int Outsd = 3;    // 盤外
         const int Bdead = 4;    // 黒死に石
         const int Wdead = 5;    // 白死に石
@@ -496,11 +496,8 @@ namespace ConsoleIgo
             } else {
                 koFlag = false; // コウではない
             }
-
-            int prisonerW = 0;  // 左のアゲハマ
-            int prisonerE = 0;  // 右のアゲハマ
-            int prisonerN = 0;  // 上のアゲハマ
-            int prisonerS = 0;  // 下のアゲハマ
+            //   左のアゲハマ 、 右のアゲハマ 、 上のアゲハマ 、 下のアゲハマ
+            int prisonerW = 0, prisonerE = 0, prisonerN = 0, prisonerS = 0;
 
             // 隣の相手の連が死んでいれば、碁盤から取り除く
             InitializeCheckBoard();             // 左
