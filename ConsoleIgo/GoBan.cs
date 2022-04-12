@@ -10,51 +10,45 @@ namespace ConsoleIgo
 {
     partial class GoBan
     {
-        // 交点の状態
-        const int Space = 0;    // 空点
-        const int Black = 1;    // 黒石
-        const int White = 2;    // 白石
-        const int Outsd = 3;    // 盤外
-        const int Bdead = 4;    // 黒死に石
-        const int Wdead = 5;    // 白死に石
-        const int Xdame = 6;    // ダメ
-        const int Barea = 7;    // 黒地
-        const int Warea = 8;    // 白地
-        static int[] countMk = new int[9];   // 交点の状態のカウンタ 
+        // フィールド変数
+        // 交点の要素  No.            空点=0,黒石=1,白石=2,盤外=3,連=4,ダメ=5,黒死=6,白死=7,黒地=8,白地=9
+        private static Char[] chr = { '・' , '○' , '●' , '？' , '◎' , '×' , '▽' , '▼' , '◇' , '◆' };
+        private const int Space = 0;
+        private const int Black = 1;
+        private const int White = 2;
+        private const int OutSd = 3;
+        private const int RenMk = 4;
+        private const int XDame = 5;
+        private const int BDead = 6;
+        private const int WDead = 7;
+        private const int BArea = 8;
+        private const int WArea = 9;
+        private static int[] countMk = new int[10];     // 各要素のカウンタ、e.g. countMk[Black] 黒石のカウンタ
 
-        // 碁盤サイズ
-        static int boardSize;   // n 路 ＋ 2(盤外用)
-        // コミ
-        static int komi = 6;     // 持碁の場合は 白に+0.5 として、白勝ちとする;
-        // プレイヤー
-        static string[] player = new string[3];         // player[Black], player[White] に com hum 
-        // 手番と座標の構造体
-        public struct KiFu {
+        private static int boardSize;                   // ボードサイズ ｎ路盤＋２(盤外を設ける)
+        private static int[,] board;                    // 盤面配列
+        private static int[,] check;                    // チェック用盤面配列  要素値0は未チェック、0以外はチェック済み
+        private static int komi = 6;                    // コミ（持碁の場合は 白に+0.5あるとして、白勝ちとする;
+        private static string[] player = new string[3]; // player[Black], player[White] に 人:"com"／ｺﾝﾋﾟｭｰﾀ:"hum" 
+        private static int move;                        // 手数
+        private static int[] prisoner = new int[3];     // アゲハマ、prizoner[Black], prizoner[White]
+        private static Point ko;                        // 劫の位置
+        private static int koNum;                       // コウが発生した手数
+        private static bool endFlag = false;            // パス2回連続したらtrue
+        public struct KiFu                              // 手番と座標の構造体
+        {
             public int Col;
             public Point Poi;
         }
-        //                      0空点,1黒石,2白石,3盤外,4黒死,5白死,6ダメ,7黒地,8白地     // 4以上はマークの主な用途
-        static char[] banChr = { '＋', '○', '●', '？', '▽', '▼', '×', '◇', '◆' };  // コンソール碁盤表示用文字
-        static int[,] goban;                            // 碁盤配列
-        static int move;                                // 手数
-        static int[] prisoner = new int[3];             // アゲハマ、prizoner[Black], prizoner[White]
-        static Point ko;                                // 劫の位置
-        static int koNum;                               // コウが発生した手数
-        static List<KiFu> kifuLog = new List<KiFu>();
-
-        static int[,] chkGoban;                         // チェック用碁盤配列
-        static int numSpace;                            // 空点の数(チェック用碁盤用)
-        static int numStone;                            // 連の石数(チェック用碁盤用)
-
-        static bool endFlag = false;                    // パス2回連続したらtrue
-        static Random rand = new Random();
-
+        private static List<KiFu> kifuLog = new List<KiFu>();
+        private static Random rand = new Random();      // 乱数
 
         /******************************************************************************/
+        // メイン
         static void Main(string[] args)
         {
             GameSettings();                                 // 対局の設定
-            int movColor = White;                           // 直前の手番の色
+            int movColor = Black;                           // 手番の色
             Point movePoint = new Point(999, 999);          // 着手位置
             Point previousMovePoint = new Point(999, 999);  // ひとつ前の着手位置
             int score = 0;                                  // 黒地引く白地引くコミ
@@ -68,8 +62,7 @@ namespace ConsoleIgo
             // 対局ループ
             while (true)
             {
-                movColor = 3 - movColor; // 手番交代
-                DispGoban();        // 碁盤表示
+                DispGoban();    // 碁盤表示
 
                 // 着手
                 ThinkMove(movColor, ref movePoint);
@@ -101,9 +94,10 @@ namespace ConsoleIgo
                 RecordMove(movColor, movePoint);
 
                 // 次の手番へ
-                move++;
-                previousMovePoint.X = movePoint.X;
-                previousMovePoint.Y = movePoint.Y;
+                previousMovePoint.X = movePoint.X;  // 直前の座標を保存
+                previousMovePoint.Y = movePoint.Y;  // 直前の座標を保存
+                movColor = 3 - movColor;            // 手番の色交代
+                move++;                             // 手数を＋１
             }
             Console.WriteLine("/////// 終了 ///////");
         }
@@ -119,8 +113,8 @@ namespace ConsoleIgo
                 if (gobanSizeStr == "5" || gobanSizeStr == "9" || gobanSizeStr == "13" || gobanSizeStr == "19")
                 {
                     boardSize = int.Parse(gobanSizeStr) + 2;
-                    goban = new int[boardSize, boardSize];
-                    chkGoban = new int[boardSize, boardSize];
+                    board = new int[boardSize, boardSize];
+                    check = new int[boardSize, boardSize];
                     break;
                 }
                 Console.WriteLine("err!");
@@ -152,13 +146,13 @@ namespace ConsoleIgo
         // 碁盤の初期化
         static void InitializeBoard()
         {
-            goban = new int[boardSize, boardSize];
+            board = new int[boardSize, boardSize];
             for (int i = 0; i < boardSize; i++)
             {
-                goban[0, i] = 3;
-                goban[i, 0] = 3;
-                goban[boardSize - 1, i] = 3;
-                goban[i, boardSize - 1] = 3;
+                board[0, i] = 3;
+                board[i, 0] = 3;
+                board[boardSize - 1, i] = 3;
+                board[i, boardSize - 1] = 3;
             }
         }
 
@@ -171,7 +165,7 @@ namespace ConsoleIgo
             for (int i = 1; i < boardSize - 1; i++) {
                 Console.Write($"{i,2} ");
                 for (int j = 1; j < boardSize - 1; j++) {
-                    Console.Write(banChr[goban[i, j]]);
+                    Console.Write(chr[board[i, j]]);
                 }
                 Console.WriteLine();
             }
@@ -235,7 +229,7 @@ namespace ConsoleIgo
         // 合法手か調べる
         static bool CheckLegal(int color, Point p)
         {
-            if (goban[p.Y, p.X] != Space) { return false; }                             // 空点じゃないと置けない
+            if (board[p.Y, p.X] != Space) { return false; }                             // 空点じゃないと置けない
             if (move > 1) {                                         
                 if (ko.X == p.X && ko.Y == p.Y && koNum == move - 1) { return false; }  // 一手前にコウを取られていたら置けない
             }
@@ -243,10 +237,10 @@ namespace ConsoleIgo
 
             // 以上のチェックを通過したので、合法手だが、
             // 乱数打ちの場合、自分の目を埋める手は禁止しておくが、
-            if ((goban[p.Y, p.X - 1] == color || goban[p.Y, p.X - 1] == Outsd) &&
-                (goban[p.Y, p.X + 1] == color || goban[p.Y, p.X + 1] == Outsd) &&
-                (goban[p.Y - 1, p.X] == color || goban[p.Y - 1, p.X] == Outsd) &&
-                (goban[p.Y + 1, p.X] == color || goban[p.Y + 1, p.X] == Outsd))
+            if ((board[p.Y, p.X - 1] == color || board[p.Y, p.X - 1] == OutSd) &&
+                (board[p.Y, p.X + 1] == color || board[p.Y, p.X + 1] == OutSd) &&
+                (board[p.Y - 1, p.X] == color || board[p.Y - 1, p.X] == OutSd) &&
+                (board[p.Y + 1, p.X] == color || board[p.Y + 1, p.X] == OutSd))
             {
                 // 手数が盤サイズの二乗を超えたら、コウの形を埋めるのはOK
                 if (move > (boardSize - 1)* (boardSize - 1)) {
@@ -272,16 +266,16 @@ namespace ConsoleIgo
         // コウの形？
         private static bool KoNoKatati(int color, int x, int y)
         {
-            if (goban[y, x] == Outsd) return false;
+            if (board[y, x] == OutSd) return false;
             // 周囲の 相手石or壁を、カウント＋１
             for (int i = 0; i < 9; i++) { countMk[i] = 0; }         // カウンタを初期化０
-            countMk[goban[y, x + 1]]++;  // 右
-            countMk[goban[y - 1, x]]++;  // 上
-            countMk[goban[y + 1, x]]++;  // 下
-            countMk[goban[y, x - 1]]++;  // 左
+            countMk[board[y, x + 1]]++;  // 右
+            countMk[board[y - 1, x]]++;  // 上
+            countMk[board[y + 1, x]]++;  // 下
+            countMk[board[y, x - 1]]++;  // 左
 
             // 相手の石と壁で3方向囲まれていれば、コウの形
-            if (countMk[3 - color] + countMk[Outsd] == 3) {
+            if (countMk[3 - color] + countMk[OutSd] == 3) {
                 return true; 
             }
             return false;
@@ -292,120 +286,94 @@ namespace ConsoleIgo
         static bool CheckSuicide(int color, Point p)
         {
             int opponentColor;              // 相手の色
-            goban[p.Y, p.X] = color;        // 仮に石を置く
+            board[p.Y, p.X] = color;        // 仮に石を置く
 
-            InitializeCheckBoard();         // チェック用碁盤と、空点数＆連石数を初期化
-            if (CheckRemove(ref chkGoban, p.X, p.Y, color, ref numSpace, ref numStone)) // 囲まれているなら自殺手かもしれない
+            InitCheckCountArry();         // チェック用碁盤と、要素カウンタを初期化
+            if (CheckRen( p.X, p.Y, color, color)) // 囲まれているなら自殺手かもしれない
             {
                 opponentColor = 3 - color;  // 相手の色
 
-                if (goban[p.Y, p.X - 1] == opponentColor) {     // 右隣が相手の石
-                    InitializeCheckBoard();
-                    if (CheckRemove(ref chkGoban, p.X - 1, p.Y, opponentColor, ref numSpace, ref numStone)) {
-                        goban[p.Y, p.X] = Space;    // 仮石を元に戻す
+                if (board[p.Y, p.X - 1] == opponentColor) {     // 右隣が相手の石
+                    InitCheckCountArry();
+                    if (CheckRen( p.X - 1, p.Y, opponentColor, opponentColor)) {
+                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
                         return false;               // その石を取れるなら自殺手ではない
                     }
                 }
 
-                if (goban[p.Y, p.X + 1] == opponentColor) {     // 左隣が相手の石
-                    InitializeCheckBoard();
-                    if (CheckRemove(ref chkGoban, p.X + 1, p.Y, opponentColor, ref numSpace, ref numStone)) {
-                        goban[p.Y, p.X] = Space;    // 仮石を元に戻す
+                if (board[p.Y, p.X + 1] == opponentColor) {     // 左隣が相手の石
+                    InitCheckCountArry();
+                    if (CheckRen( p.X + 1, p.Y, opponentColor, opponentColor)) {
+                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
                         return false;               // その石を取れるなら自殺手ではない
                     }
                 }
 
-                if (goban[p.Y - 1, p.X] == opponentColor) {     // 上隣が相手の石
-                    InitializeCheckBoard();
-                    if (CheckRemove(ref chkGoban, p.X, p.Y - 1, opponentColor, ref numSpace, ref numStone)) {
-                        goban[p.Y, p.X] = Space;    // 仮石を元に戻す
+                if (board[p.Y - 1, p.X] == opponentColor) {     // 上隣が相手の石
+                    InitCheckCountArry();
+                    if (CheckRen( p.X, p.Y - 1, opponentColor, opponentColor)) {
+                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
                         return false;               // その石を取れるなら自殺手ではない
                     }
                 }
 
-                if (goban[p.Y + 1, p.X] == opponentColor) {     // 下隣が相手の石
-                    InitializeCheckBoard();
-                    if (CheckRemove(ref chkGoban, p.X, p.Y + 1, opponentColor, ref numSpace, ref numStone)) {
-                        goban[p.Y, p.X] = Space;    // 仮石を元に戻す
+                if (board[p.Y + 1, p.X] == opponentColor) {     // 下隣が相手の石
+                    InitCheckCountArry();
+                    if (CheckRen( p.X, p.Y + 1, opponentColor, opponentColor)) {
+                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
                         return false;               // その石を取れるなら自殺手ではない
                     }
                 }
 
-                goban[p.Y, p.X] = Space;    // 仮石を元に戻す
+                board[p.Y, p.X] = Space;    // 仮石を元に戻す
                 return true;                // 相手の石を取れないので、自殺手になる
             }
             else {
-                goban[p.Y, p.X] = Space;    // 仮石を元に戻す
+                board[p.Y, p.X] = Space;    // 仮石を元に戻す
                 return false;               // 囲まれていないので、自殺手ではない
             }
         }
 
         /******************************************************************************/
-        // チェック用碁盤のマークをクリア
-        static void InitializeCheckBoard()
+        // チェック配列とカウンタ配列の初期化
+        private static void InitCheckCountArry()
         {
-            Array.Copy(goban, chkGoban, goban.Length);  // 現状碁盤をチェック用碁盤にコピー
-            numSpace = 0;   // 空点の数
-            numStone = 0;   // 連の石数
+            Array.Clear(check, 0, check.Length);
+            Array.Clear(countMk, 0, countMk.Length);
         }
 
         /******************************************************************************/
-        // 座標(x,y)のcolor石が相手に囲まれているか調べる。
-        // 空点が無いなら true 、空点が有れば false を返す。
-        private static bool CheckRemove(ref int[,] ary, int x, int y, int color, ref int numSpace, ref int numStone)
-       {
-            //再帰しない条件の処理
-            if (ary[y, x] > 3) return false;        // チェック済 
-            if (ary[y, x] != color) return false;   // 自分のcolor石が置かれていない
-
-            //隣が空点なら、空点チェック済みマーク を入れ、空点カウント＋１
-            if (ary[y, x - 1] == Space) { ary[y, x - 1] = Xdame; numSpace++; }            //左隣
-            if (ary[y, x + 1] == Space) { ary[y, x + 1] = Xdame; numSpace++; }            //右隣
-            if (ary[y - 1, x] == Space) { ary[y - 1, x] = Xdame; numSpace++; }            //上隣
-            if (ary[y + 1, x] == Space) { ary[y + 1, x] = Xdame; numSpace++; }            //下隣
-            ary[y, x] = 4; numStone++;  // チェック済みマーク 4 を入れ、連の石カウント＋１
-
-            //再帰呼び出し
-            _ = CheckRemove(ref ary, x - 1, y, color, ref numSpace, ref numStone);   //左隣
-            _ = CheckRemove(ref ary, x, y + 1, color, ref numSpace, ref numStone);   //下隣
-            _ = CheckRemove(ref ary, x + 1, y, color, ref numSpace, ref numStone);   //右隣
-            _ = CheckRemove(ref ary, x, y - 1, color, ref numSpace, ref numStone);   //上隣
-            return numSpace == 0;
-        }
-
-        /******************************************************************************/
-        // 連の石を消す
-        static void KeSu(int x, int y, int color)
+        //  囲碁プログラムの為の多機能再帰関数（2次元配列用）
+        /// <summary>
+        /// <para>座標(x,y)の連を elem1 から elem2 に置き換える。</para>
+        /// <para>連の要素数が countMk [ elem1 ] に入る。</para>
+        /// <para>連周囲の各要素数が countMk [ 交点の要素No. ] に入る。</para>
+        /// <para>フィールド変数は、 board[,] check[,] countMk[] 交点マーク要素No が必要。</para>
+        /// </summary>
+        /// <param name="x">碁盤のｘ座標</param>
+        /// <param name="y">碁盤のｙ座標</param>
+        /// <param name="elem1">連の構成要素</param>
+        /// <param name="elem2">この要素に置き換え</param>
+        /// <returns>true(空点無) | false(空点有)</returns>
+        static bool CheckRen(int x, int y, int elem1, int elem2)
         {
-            goban[y, x] = Space;    // 座標の石を消す
-            // 隣の石が同じ色なら、再帰で消す
-            if (goban[y, x - 1] == color) { KeSu(x - 1, y, color); }    // 左
-            if (goban[y, x + 1] == color) { KeSu(x + 1, y, color); }    // 右
-            if (goban[y - 1, x] == color) { KeSu(x, y - 1, color); }    // 上
-            if (goban[y + 1, x] == color) { KeSu(x, y + 1, color); }    // 下
-        }
-
-        /******************************************************************************/
-        // 連続する要素（石or空点）を数えて、マークをつける
-        static void Marking(int x, int y, int element, int mark, ref int[] numMark)
-        {
-            if (goban[y, x] != element) return; // 数える要素ではない 
-            if (goban[y, x] == mark) return;    // マーク済み
-
-            goban[y, x] = mark;                 // 座標の要素にマーキング
-            numMark[element]++;
-
-            // 周囲の マークを、カウント＋１（1:黒、2:白 のカウントが必要、他のマークのカウントは・・）
-            if (goban[y, x + 1] == Black || goban[y, x + 1] == White) countMk[goban[y, x + 1]]++;  // 右
-            if (goban[y - 1, x] == Black || goban[y - 1, x] == White) countMk[goban[y - 1, x]]++;  // 上
-            if (goban[y + 1, x] == Black || goban[y + 1, x] == White) countMk[goban[y + 1, x]]++;  // 下
-            if (goban[y, x - 1] == Black || goban[y, x - 1] == White) countMk[goban[y, x - 1]]++;  // 左
-
-            // 隣の石が同じ要素なら、再帰でMarkingする
-            Marking(x - 1, y, element, mark, ref numMark);    // 左
-            Marking(x + 1, y, element, mark, ref numMark);    // 右
-            Marking(x, y - 1, element, mark, ref numMark);    // 上
-            Marking(x, y + 1, element, mark, ref numMark);    // 下
+            // 再帰しない条件
+            if (check[y, x] != 0) return false; // この座標は、カウント済み
+            if (board[y, x] != elem1) return false; // この座標は、連の要素 elem1 ではない
+            //  隣が 連の要素ではなく     且つ        未チェック  なら、   各要素カウンタを＋１     周囲チェック済み(-1)とする
+            if (board[y, x - 1] != elem1 && check[y, x - 1] == 0) { countMk[board[y, x - 1]]++; check[y, x - 1] = -1; } // 左
+            if (board[y, x + 1] != elem1 && check[y, x + 1] == 0) { countMk[board[y, x + 1]]++; check[y, x + 1] = -1; } // 右
+            if (board[y - 1, x] != elem1 && check[y - 1, x] == 0) { countMk[board[y - 1, x]]++; check[y - 1, x] = -1; } // 上
+            if (board[y + 1, x] != elem1 && check[y + 1, x] == 0) { countMk[board[y + 1, x]]++; check[y + 1, x] = -1; } // 下
+            // 連要素をelem2にして、連カウンタを＋１、連チェック済み(elem1+1) ※elem1=空点(0値)でもチェック済みになるように+1）
+            board[y, x] = elem2; countMk[elem1]++; check[y, x] = elem1 + 1;
+            // 隣を調べる為に、再帰呼び出し
+            CheckRen(x - 1, y, elem1, elem2);   // 左
+            CheckRen(x + 1, y, elem1, elem2);   // 右
+            CheckRen(x, y - 1, elem1, elem2);   // 上
+            CheckRen(x, y + 1, elem1, elem2);   // 下
+            // 戻り値
+            return countMk[Space] == 0;         // true(空点無) | false(空点有)
         }
 
         /******************************************************************************/
@@ -419,7 +387,7 @@ namespace ConsoleIgo
             // 死に石を消す
             for (int y =1; y < boardSize - 1; y++) for (int x = 1; x < boardSize - 1; x++)
                 {
-                    if(goban[y, x] == 4 || goban[y, x] == 5) { goban[y, x] = Space; }
+                    if(board[y, x] == 4 || board[y, x] == 5) { board[y, x] = Space; }
                 }
             DispGoban();
 
@@ -428,22 +396,21 @@ namespace ConsoleIgo
             {
                 for (int x = 1; x < boardSize - 1; x++)
                 {
-                    if (goban[y, x] != Space) { continue; }  // 空点でなければスキップ
-
+                    if (board[y, x] != Space) { continue; } // 空点でなければスキップ
                     // 空点なら以下の処理
-                    for (int i = 0; i < 9; i++) { countMk[i] = 0; }         // カウンタを初期化０
-                    Marking(x, y, Space, Xdame, ref countMk);        // 空点の数
+                    InitCheckCountArry();                   // カウンタを初期化０
+                    CheckRen(x, y, Space, XDame);           // 連空点の数と周囲要素のカウント
 
                     if (countMk[Black] > 0 && countMk[White] == 0)
                     {   // 黒石だけに囲まれている
                         bScore += countMk[Space];
-                        Marking(x, y, Xdame, Barea, ref countMk);
+                        InitCheckCountArry(); CheckRen(x, y, XDame, BArea);
                     }
 
                     if (countMk[White] > 0 && countMk[Black] == 0)
                     {   // 白石だけに囲まれている
                         wScore += countMk[Space];
-                        Marking(x, y, Xdame, Warea, ref countMk);
+                        InitCheckCountArry(); CheckRen(x, y, XDame, WArea);
                     }
                 }
             }
@@ -466,14 +433,14 @@ namespace ConsoleIgo
             while (true)
             {
                 // 死に石の座標をキー入力
-                InputCoordinate(Outsd, ref p);
+                InputCoordinate(OutSd, ref p);
                 if (p.X == 99) { break; }
-                color = goban[p.Y, p.X];
+                color = board[p.Y, p.X];
                 if (!(color == Black || color == White)) { continue; }// 座標に石が無かったら再入力
 
                 // 死に石のカウントとマークキング
-                for (int i = 0; i < 9; i++) { countMk[i] = 0; }         // カウンタを初期化０
-                Marking(p.X, p.Y, color, color + 3, ref countMk);
+                InitCheckCountArry(); 
+                CheckRen(p.X, p.Y, color, color + 3);
                 prisoner[3 - color] += countMk[color];
 
                 DispGoban();        // 碁盤表示
@@ -484,13 +451,14 @@ namespace ConsoleIgo
         // 碁盤に石を置く
         static void SetStone(int color, ref Point p)
         {
+            var opponentColor = 3 - color;  // 相手の色
             bool koFlag = false;
-            goban[p.Y, p.X] = color;    // 座標に石を置く
+            board[p.Y, p.X] = color;    // 座標に石を置く
             // 置いた石の4方向隣に同じ色の石があるか？
-            if (goban[p.Y + 1, p.X] != color &&
-                goban[p.Y - 1, p.X] != color &&
-                goban[p.Y, p.X + 1] != color &&
-                goban[p.Y, p.X - 1] != color) {
+            if (board[p.Y + 1, p.X] != color &&
+                board[p.Y - 1, p.X] != color &&
+                board[p.Y, p.X + 1] != color &&
+                board[p.Y, p.X - 1] != color) {
                 // 同じ色の石が無いならコウかもしれない
                 koFlag = true;  
             } else {
@@ -498,28 +466,19 @@ namespace ConsoleIgo
             }
             //   左のアゲハマ 、 右のアゲハマ 、 上のアゲハマ 、 下のアゲハマ
             int prisonerW = 0, prisonerE = 0, prisonerN = 0, prisonerS = 0;
-
             // 隣の相手の連が死んでいれば、碁盤から取り除く
-            InitializeCheckBoard();             // 左
-            if (CheckRemove(ref chkGoban, p.X - 1, p.Y, 3 - color, ref numSpace, ref numStone)) {
-                KeSu(p.X - 1, p.Y, 3 - color);
-                prisonerW = numStone;
-            }
-            InitializeCheckBoard();             // 右
-            if (CheckRemove(ref chkGoban, p.X + 1, p.Y, 3 - color, ref numSpace, ref numStone)) {
-                KeSu(p.X + 1, p.Y, 3 - color);
-                prisonerE = numStone;
-            }
-            InitializeCheckBoard();             // 上
-            if (CheckRemove(ref chkGoban, p.X, p.Y - 1, 3 - color, ref numSpace, ref numStone)) {
-                KeSu(p.X, p.Y - 1, 3 - color);
-                prisonerN = numStone;
-            }
-            InitializeCheckBoard();             // 下
-            if (CheckRemove(ref chkGoban, p.X, p.Y + 1, 3 - color, ref numSpace, ref numStone)) {
-                KeSu(p.X, p.Y + 1, 3 - color);
-                prisonerS = numStone;
-            }
+            InitCheckCountArry();             // 左
+            if (CheckRen(p.X - 1, p.Y, opponentColor, Space)) prisonerW = countMk[opponentColor];
+            else RestoreBoard();
+            InitCheckCountArry();             // 右
+            if (CheckRen( p.X + 1, p.Y, opponentColor, Space)) prisonerE = countMk[opponentColor];
+            else RestoreBoard();
+            InitCheckCountArry();             // 上
+            if (CheckRen( p.X, p.Y - 1, opponentColor, Space)) prisonerN = countMk[opponentColor];
+            else RestoreBoard();
+            InitCheckCountArry();             // 下
+            if (CheckRen( p.X, p.Y + 1, opponentColor, Space)) prisonerS = countMk[opponentColor];
+            else RestoreBoard();
 
             // 取り除かれた石の合計
             int prisonerAll = prisonerW + prisonerE + prisonerN + prisonerS;
@@ -539,6 +498,19 @@ namespace ConsoleIgo
         }
 
         /******************************************************************************/
+        // 盤面を元に戻す
+        private static void RestoreBoard()
+        {
+            for (int y = 0; y < boardSize - 1; y++)
+            {
+                for (int x = 0; x < boardSize - 1; x++)
+                {
+                    if (check[y, x] > 0) board[y, x] = check[y, x] - 1;
+                }
+            }
+        }
+
+        /******************************************************************************/
         // 棋譜に記録
         static void RecordMove(int color, Point p)
         {
@@ -554,7 +526,7 @@ namespace ConsoleIgo
             var countM = 0; // 合法な（石を置くことが可能な）空点をカウントする変数
             for (int i = 1; i < boardSize - 1; i++) for (int j = 1; j < boardSize - 1; j++)
                 {
-                    if (goban[i, j] != Space) continue; // 空点以外はスキップ
+                    if (board[i, j] != Space) continue; // 空点以外はスキップ
                     // 空点なら以下
                     p.X = j; p.Y = i;
                     if (CheckLegal(color, p)) countM++; // 合法ならカウント＋１
