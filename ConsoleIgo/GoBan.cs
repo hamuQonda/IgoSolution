@@ -26,8 +26,8 @@ namespace ConsoleIgo
         private static int[] countMk = new int[10];     // 各要素のカウンタ、e.g. countMk[Black] 黒石のカウンタ
 
         private static int boardSize;                   // ボードサイズ ｎ路盤＋２(盤外を設ける)
-        private static int[,] board;                    // 盤面配列
-        private static int[,] check;                    // チェック用盤面配列  要素値0は未チェック、0以外はチェック済み
+        private static int[] board;                    // 盤面配列
+        private static int[] check;                    // チェック用盤面配列  要素値0は未チェック、0以外はチェック済み
         private static int komi = 6;                    // コミ（持碁の場合は 白に+0.5あるとして、白勝ちとする;
         private static string[] player = new string[3]; // player[Black], player[White] に 人:"com"／ｺﾝﾋﾟｭｰﾀ:"hum" 
         private static int move;                        // 手数
@@ -44,7 +44,7 @@ namespace ConsoleIgo
         private static Random rand = new Random();      // 乱数
         /*-- Monte Carlo 用 ----------------------------------------------------------*/
         private static int allPlayOuts;                 // playoutを行った回数
-        private static int[,] boardBkup;
+        private static int[] boardBkup;
 
         /******************************************************************************/
         // メイン
