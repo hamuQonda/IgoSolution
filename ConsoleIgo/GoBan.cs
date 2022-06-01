@@ -8,7 +8,7 @@ using System.Drawing;
 
 namespace ConsoleIgo
 {
-    partial class GoBan
+    public class GoBan
     {
         // フィールド変数
         // 交点の要素  No.            空点=0,黒石=1,白石=2,盤外=3,連=4,ダメ=5,黒死=6,白死=7,黒地=8,白地=9
@@ -23,105 +23,226 @@ namespace ConsoleIgo
         private const int WDead = 7;
         private const int BArea = 8;
         private const int WArea = 9;
-        private static int[] countMk = new int[10];     // 各要素のカウンタ、e.g. countMk[Black] 黒石のカウンタ
-        private static int[] dir4 = new int[4] { -1, +1, -boardSize, +boardSize }; // 左右上下への移動量
-        private static int boardSize;                   // ボードサイズ ｎ路盤＋２(盤外を設ける)
-        private static int[] board;                    // 盤面配列
-        private static int[] check;                    // チェック用盤面配列  要素値0は未チェック、0以外はチェック済み
+        
         private static int komi = 6;                    // コミ（持碁の場合は 白に+0.5あるとして、白勝ちとする;
-        private static string[] player = new string[3]; // player[Black], player[White] に 人:"com"／ｺﾝﾋﾟｭｰﾀ:"hum" 
-        private static int move;                        // 手数
-        private static int[] prisoner = new int[3];     // アゲハマ、prizoner[Black], prizoner[White]
+        private static int nRoBan;                      // ｎ路盤
+        private static int bdWid;                       // ボード幅 ｎ路盤＋２(盤外を設ける)
+        private static int bdMax;                       // 
+        private static int[] board;                     // 盤面配列
+        private static int[] check;                     // チェック用盤面配列  要素値0は未チェック、0以外はチェック済み
+        private static int dL;                          // 左への移動量 -1
+        private static int dR;                          // 右への移動量 +1
+        private static int dU;                          // 上への移動量 -bdWid
+        private static int dD;                          // 下への移動量 +bdWid
+        private static int[] dir4;                      // 左右上下への移動量(forで回す場合に使用)
+        private static int[] dirX;                      // dir4から時計回りの移動、(元座標+dir4+dirX)で斜めの位置となる
+        private static int[] hama = new int[3];         // アゲハマ、hama[Black], hama[White]
+        private static int[] kifu = new int[1000];      // 棋譜
         private static int ko_z;                        // コウで打てない位置
-        private static int koNum;                       // コウが発生した手数
-        private static bool endFlag = false;            // パス2回連続したらtrue
-        public struct KiFu                              // 手番と座標の構造体
-        {
-            public int Col;
-            public Point Poi;
-        }
-        private static List<KiFu> kifuLog = new List<KiFu>();
-        private static Random rand = new Random();      // 乱数
-        /*-- Monte Carlo 用 ----------------------------------------------------------*/
         private static int allPlayOuts;                 // playoutを行った回数
-        private static int[] boardBkup;
+        private static int[] count = new int[10];       // 各要素のカウンタ、e.g. count[Black] 黒石のカウンタ
+        private static string[] player = new string[3]; // player[Black], player[White] に 人:"com"／ｺﾝﾋﾟｭｰﾀ:"hum" 
 
-        /******************************************************************************/
-        // (x,y)座標を1次元(y*boardSize+x)に変換
-        private static int sw1z(int x, int y)
-        {
-            return y * boardSize + x;
-        }
+                        //private static int moveTesuu;                        // 手数
+                        //private static int koNum;                       // コウが発生した手数
+                        private static bool endFlag = false;            // パス2回連続したらtrue
+                        //public struct KiFu                              // 手番と座標の構造体
+                        //{
+                        //    public int Col;
+                        //    public Point Poi;
+                        //}
+                        //private static List<KiFu> kifuLog = new List<KiFu>();
+                        private static Random rand = new Random();      // 乱数
+                        ///*-- Monte Carlo 用 ----------------------------------------------------------*/
+                        //private static int[] boardBkup;
 
-        /******************************************************************************/
-        // 1次元座標を2次元に変換
-        private static (int,int) sw2z(int z)
-        {
-            int y = z / boardSize;
-            int x = z % boardSize;
-            return (x, y);
-        }
+        /// <summary>
+        /// Switch to 1D  // (x,y)座標を1次元(y*boardSize+x)に変換
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <returns></returns>
+        public static int sw1z(int x, int y) { return y * bdWid + x; }
+
+        /// <summary>
+        /// Switch to 2D // 1次元座標を2次元に変換
+        /// </summary>
+        /// <param name="z"></param>
+        /// <returns>(x,y)</returns>
+        public static (int, int) sw2z(int z) { int x = z % bdWid; int y = z / bdWid; return (x, y); }
 
         /******************************************************************************/
         // メイン
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
-            GameSettings();                                 // 対局の設定
-            int movColor = Black;                           // 手番の色
-            Point movePoint = new Point(999, 999);          // 着手位置
-            Point previousMovePoint = new Point(999, 999);  // ひとつ前の着手位置
-            int score = 0;                                  // 黒地引く白地引くコミ
-
-            InitializeBoard();// 碁盤の初期化
-            Console.WriteLine("/////// コンソール碁盤 ///////");
-            prisoner[Black] = 0;
-            prisoner[White] = 0;
-            move = 0;
-
+            GameInitialize();           // 対局の設定
+            int color = Black;          // 手番の色
+            int tesuu = 0;              // 手数
+            DispGoban();
             // 対局ループ
             while (true)
             {
                 allPlayOuts = 0;    // playout回数を初期化0 ///MonteCarlo用///
-                DispGoban();                        // 碁盤表示
-                ThinkMove(movColor, ref movePoint); // 着手位置を決める
-
+                // 打ち手が コンピュータか？ yes→モンテカルロ法で一手を決める、no→人間がキー入力で一手を決める
+                int z = player[color] == "Com" ? SelectBestMove(color) : HumanSelectMove(color);
+                int err = Move(z, color);
+                if (err != 0) { continue; }
+                kifu[tesuu++] = z;  // 棋譜に記録
+                DispGoban();        // 碁盤表示
+                Console.WriteLine($"Bh:{hama[Black]},Wh:{hama[White]}");
+                Console.WriteLine($"{tesuu}:{sw2z(z)},色={color},all_playouts={allPlayOuts}");
                 // 盤サイズより大きい座標なら、投了
-                if (movePoint.X > boardSize - 2 || movePoint.Y > boardSize - 2) {
-                    string msgToURyoU = (movColor == Black) ? "白の勝ち！ 黒は投了しました。" : "黒の勝ち！ 白は投了しました。";
+                if (z > bdMax)
+                {
+                    string msgToURyoU = (color == Black) ? "白の勝ち！ 黒は投了しました。" : "黒の勝ち！ 白は投了しました。";
                     Console.WriteLine(msgToURyoU);
                     Console.ReadKey();
                     break;
                 }
-
                 // パスが2回連続したら終局処理
-                if ((movePoint.X < 1 || movePoint.Y < 1) && (previousMovePoint.X < 1 || previousMovePoint.Y < 1)) {
-                    endFlag = true;
-                    score = (int)CountScore(movColor);
-                    if (score > 0) { Console.WriteLine($"{score-.5}目、黒の勝ち！！"); }
-                    if (score < 0) { Console.WriteLine($"{-score+.5}目、白の勝ち！！"); }
-                    if (score == 0) Console.WriteLine("0.5目！白の勝ち！"); 
+                if (z == 0 && tesuu > 1 && kifu[tesuu - 2] == 0)
+                {
+                    Console.WriteLine("パスが2回連続したので終局");
+                    int kekka = CountScore(color);
+                    string msg = kekka > 0 ? $"{kekka - 0.5}黒の勝ち！" : $"{-kekka + 0.5}白の勝ち！";
+                    Console.WriteLine(msg);
                     Console.ReadKey();
                     break;
                 }
-
-                // パスでなければ石を置く
-                if ((movePoint.X + movePoint.Y) != 0) { SetStone(movColor, ref movePoint); }
-
-                // 棋譜に記録
-                RecordMove(movColor, movePoint);
-
-                // 次の手番へ
-                previousMovePoint.X = movePoint.X;  // 直前の座標を保存
-                previousMovePoint.Y = movePoint.Y;  // 直前の座標を保存
-                movColor = 3 - movColor;            // 手番の色交代
-                move++;                             // 手数を＋１
+                color = 3 - color;
             }
             Console.WriteLine("/////// 終了 ///////");
+            Console.ReadKey();
+            return 0;
+        }
+
+        private static int HumanSelectMove(int color)
+        {
+            // 入力指示メッセージ
+            Console.WriteLine(color == Black ? "\n黒番：座標(x,y)を入力" : "\n白番：座標(x,y)を入力");
+            Console.WriteLine("パスは 0 、投了は 99を入力");
+            var str = ""; int x; int y;
+            // 入力ループ
+            while (true)
+            {
+                Console.Write("x,y : ");
+                str = Console.ReadLine();
+                if (str == null || str.Length == 0) { continue; }   // 未入力なら再入力
+                if (str == "0" ) { return 0; }          // パス：0 を返す
+                if (str == "99") { return bdMax + 1; }  // 投了：盤外の座標を返す
+                if (!str.Contains(',')) { continue; }   // ',' が無ければ再入力
+                var sX = str.Split(',')[0]; // x座標文字
+                var sY = str.Split(',')[1]; // y座標文字
+                if (!int.TryParse(sX, out x)) continue;  // 整数でなければ再入力
+                if (!int.TryParse(sY, out y)) continue;  // 整数でなければ再入力
+                if (x < 1 || x > bdWid - 2) continue;  // 範囲外なら再入力
+                if (y < 1 || y > bdWid - 2) continue;  // 範囲外なら再入力
+                return sw1z(x, y);
+            }
+        }
+
+        /// <summary>
+        /// 石を置く
+        /// </summary>
+        /// <param name="tz"></param>
+        /// <param name="color"></param>
+        /// <returns>0＝正常手、0以外＝不正手</returns>
+        private static int Move(int tz, int color)
+        {
+            if (tz == 0) { ko_z = 0; return 0; }   // 座標値ゼロ＝パスならコウ解消0して戻る
+            if (tz > bdMax) { return 0; }   // 盤外の座標なら 投了
+            if (tz == ko_z) { return 2; }   // 直前のコウ抜き座標には置けない
+            if (board[tz] != Space) { return 4; }   // 空点ではない座標には置けない
+
+            var oppColor = 3 - color;       // 相手の石色
+            var totalDeadStones = 0;        // 取れる石の合計
+            var ko_kamo = 0;                // コウになるかもしれない場所
+            var ko_kamo_count = 0;          // コウになるかもしれない場所を見つけたら+1,2になったら2方向のコウ抜きでコウ解消できる
+            var atari = 0;                  // 当たりとなっている連数
+            var nanameOpp = 0;              // 
+            int[] countDir = new int[4];    // 隣の要素数 [0]=ダメ数、[elem]=味方の石数、[3]=盤外数
+
+            // 座標tzの周囲と、周囲の状態を調べる
+            for (int i = 0; i < 4; i++) {
+                var z = tz + dir4[i];       // tzの隣の座標
+                var c = board[z];           // tzの隣の要素、石or空点or盤外
+                countDir[c]++;              // 隣の要素をカウント
+                if(board[z + dirX[i]] == oppColor) { nanameOpp++; } // 斜めに相手の石があったらカウント
+
+                if (c == Space || c == OutSd) { continue; } // 隣が 空点か壁 なら、次の方向へ
+                // 以下、石(自分or相手の)がある
+                ClearCheckCount();          // チェック&カウント配列を初期化
+                ScanRen(z, ref c);              // tzの隣の連石カウント＆連周囲要素カウント
+
+                if (c == oppColor) {        // 隣が相手の連石
+                    if (count[Space] > 1) { continue; } // tzに置いてもダメがあるので取れない、次の方向へ
+                    // 以下、ダメが無いので取れる
+                    KeSu(z, ref oppColor);                                      // 取れる石を消す
+                    totalDeadStones += count[oppColor];                         // 取石合計に連石数を加える
+                    hama[color] += totalDeadStones;
+                    if (count[oppColor] == 1) { ko_kamo = z; ko_kamo_count++; } // 取石が１つだけなら コウかも+1
+                    if (ko_kamo_count >= 2) { ko_kamo = 0; }                    // 2方向以上コウ抜きできるなら、コウかも解消
+                    continue;
+                }
+                // 以下、隣が自分の石
+                if (count[Space] == 1) { atari++; } // 当たり状態の自分の石があったら atariカウント＋１
+            }
+            board[tz] = color;              // tz座標に置く
+            // 置いた石の連を調べる
+            ClearCheckCount();              // チェック配列とカウント配列を初期化して
+            ScanRen(tz, ref color);         // 置いた自分の石の連石カウント ＆ 連周囲要素をカウント
+            if (count[Space] == 0) { board[tz] = Space; return 1; }     // ダメが無いので自殺手、置いた石は消しておく
+            // 以下、ダメがある
+
+            // モンテカルロ法の禁じ手として、自分の一眼をつぶす手は禁止
+            //      4方向が相手の石と壁  且つ  当たりとなっている自分の石が無い 且つ 欠け目ではない、なら一眼
+            if (countDir[OutSd] + countDir[color] == 4 && atari == 0 && nanameOpp < 2) { 
+                board[tz] = Space; return 3;                                                // 置いてはいけない
+            }
+
+            ko_z = 0;                       // コウ解消
+            if (ko_kamo_count == 1 && totalDeadStones == 1 && count[Space] == 1) {
+                ko_z = ko_kamo;             // (コウかもカウント１、取石合計１、ダメ1) なら コウ発生
+            }
+            return 0;
+        }
+
+        /******************************************************************************/
+        //  囲碁プログラムの為の多機能再帰関数（1次元配列用）
+        /// <summary>
+        /// <para>連の要素数、周囲の要素数 を調べる。</para>
+        /// <para>count[elem]：連の要素数</para>
+        /// <para>count[3-elem]：連周囲の相手の石数</para>
+        /// <para>count[Space]：連周囲のダメ数</para>
+        /// <para>count[OutSd]：連周囲の盤外数</para>
+        /// <para>フィールドに、 盤面配列 board[]、チェック用配列 check[]、カウント用 count[] が必要。</para>
+        /// </summary>
+        /// <param name="z">碁盤のz(1次元化)座標</param>
+        /// <param name="elem">連の石色</param>
+        static void ScanRen(int z, ref int elem)
+        /// <returns>true(空点無) | false(空点有)</returns>
+        //static bool ScanRen(int z, int elem)
+        {
+            // 連の石数を＋１、連チェック済み(1)
+            count[elem]++; check[z] = 1;
+            // 隣が 連のcolor石ではなく 且つ    未チェック0   なら、  各要素カウンタを＋１    チェック済み(-1)とする
+            if (board[z + dL] != elem && check[z + dL] == 0) { count[board[z + dL]]++; check[z + dL] = -1; } // 左
+            if (board[z + dR] != elem && check[z + dR] == 0) { count[board[z + dR]]++; check[z + dR] = -1; } // 右
+            if (board[z + dU] != elem && check[z + dU] == 0) { count[board[z + dU]]++; check[z + dU] = -1; } // 上
+            if (board[z + dD] != elem && check[z + dD] == 0) { count[board[z + dD]]++; check[z + dD] = -1; } // 下
+            // 隣が    連のcolor石で   且つ     未チェック0  なら、再帰呼び出し
+            if (board[z + dL] == elem && check[z + dL] == 0) ScanRen(z + dL, ref elem);   // 左
+            if (board[z + dR] == elem && check[z + dR] == 0) ScanRen(z + dR, ref elem);   // 右
+            if (board[z + dU] == elem && check[z + dU] == 0) ScanRen(z + dU, ref elem);   // 上
+            if (board[z + dD] == elem && check[z + dD] == 0) ScanRen(z + dD, ref elem);   // 下
+            //// 戻り値
+            //return count[Space] == 0;         // true(空点無) | false(空点有)// 石を置いて判定する場合
+            ////return count[Space] - 1 == 0;     // true(空点無) | false(空点有)// 石を置かずに判定する場合
         }
 
         /******************************************************************************/
         // 対局の設定
-        private static void GameSettings()
+        private static void GameInitialize()
         {
             while (true)
             {
@@ -129,7 +250,16 @@ namespace ConsoleIgo
                 var gobanSizeStr = Console.ReadLine();
                 if (gobanSizeStr == "5" || gobanSizeStr == "9" || gobanSizeStr == "13" || gobanSizeStr == "19")
                 {
-                    boardSize = int.Parse(gobanSizeStr) + 2;
+                    nRoBan = int.Parse(gobanSizeStr);
+                    bdWid = nRoBan + 2;
+                    dL = -1;        // 左 移動量
+                    dR = +1;        // 右 移動量
+                    dU = -bdWid;    // 上 移動量
+                    dD = +bdWid;    // 下 移動量
+                    dir4 = new int[4] { -1    , +1    , -bdWid, +bdWid }; // 左右上下への移動量(forで回す場合に使用)
+                    dirX = new int[4] { -bdWid, +bdWid, +1    , -1     }; // dir4から時計回りの移動
+                    bdMax = bdWid * bdWid;
+                    InitializeBoard();
                     break;
                 }
                 Console.WriteLine("err!");
@@ -158,29 +288,31 @@ namespace ConsoleIgo
             }
         }
         /******************************************************************************/
-        // 碁盤の初期化
+        /// <summary>
+        /// 碁盤の初期化
+        /// </summary>
         static void InitializeBoard()
         {
-            board = new int[boardSize * boardSize];
-            check = new int[boardSize * boardSize];
-            for (int i = 0; i < boardSize; i++)
+            board = new int[bdMax];
+            check = new int[bdMax];
+            for (int i = 0; i < bdWid; i++)
             {
                 board[sw1z(0, i)] = 3;
                 board[sw1z(i, 0)] = 3;
-                board[sw1z(boardSize - 1, i)] = 3;
-                board[sw1z(i, boardSize - 1)] = 3;
+                board[sw1z(bdWid - 1, i)] = 3;
+                board[sw1z(i, bdWid - 1)] = 3;
             }
         }
 
         /******************************************************************************/
         // 碁盤の表示
-        static void DispGoban()
+        private static void DispGoban()
         {
-            Console.Clear();
-            Console.WriteLine("    1 2 3 4 5 6 7 8 910111213141516171819".Substring(0, (boardSize - 2) * 2 + 3));
-            for (int i = 1; i < boardSize - 1; i++) {
+            //Console.Clear();
+            Console.WriteLine("    1 2 3 4 5 6 7 8 910111213141516171819".Substring(0, (bdWid * 2) - 1));
+            for (int i = 1; i < bdWid - 1; i++) {
                 Console.Write($"{i,2} ");
-                for (int j = 1; j < boardSize - 1; j++) {
+                for (int j = 1; j < bdWid - 1; j++) {
                     Console.Write(chr[board[sw1z(j, i)]]);
                 }
                 Console.WriteLine();
@@ -188,79 +320,53 @@ namespace ConsoleIgo
         }
 
         /******************************************************************************/
-        // 着手位置の入力、又は、思考エンジン
-        static void ThinkMove(int color, ref Point p)
-        {
-            Point input = new Point(999, 999);
-            while (true)
-            {
-                if (player[color]=="Hum") {             // プレイヤーが人間なら
-                    InputCoordinate(color, ref input);      // 着手座標をキー入力
-                }
-                else {                                  // プレイヤーがコンピュータなら
-                    //RandomXY(color, ref input);             // 思考エンジン（乱数）
-                    (input.X, input.Y) = sw2z(SelectBestMove(color));   // 可能な手に対してplayoutを行う // 思考エンジン（モンテカルロ）
-                }
-
-                if ((input.X > 0 && input.X < boardSize - 1) &&  // 座標が適正か？
-                    (input.Y > 0 && input.Y < boardSize - 1)) {
-                    // 合法手ならwhileループを抜ける
-                    if (CheckLegal(color, input)) { break; }
-                }
-                else { break; }
-            }
-            p.X = input.X;
-            p.Y = input.Y;
-        }
-
-        /******************************************************************************/
         // 可能な手に対してplayoutを行う  ///MonteCarlo用///
         private static int SelectBestMove(int color)
         {
             int try_num = 30;       // playoutを繰り返す回数
-            int best_z = 0;         // 最善手
+            int best_z = 0;         // 最善手の座標
             double best_value = -100;
 
-            int[] board_copy = new int[boardSize * boardSize];
-            Array.Copy(board, board_copy, board.Length);    // 現局面を保存
-            int ko_z_copy = ko_z;                           // コウの位置も保存
-            int pB = prisoner[Black];                       // アゲハマを保存
-            int pW = prisoner[White];                       // アゲハマを保存
+            int[] board_copy = new int[bdMax];
+            Array.Copy(board, board_copy, bdMax);   // 現局面を保存
+            int ko_z_copy = ko_z;                   // コウの位置も保存
+            int pB = hama[Black];                   // アゲハマを保存
+            int pW = hama[White];                   // アゲハマを保存
 
             // すべての空点を着手候補に
-            for (int y = 1; y < boardSize - 1; y++) {
-                for (int x = 1; x < boardSize - 1; x++) {
+            for (int y = 1; y < bdWid - 1; y++) { 
+                for (int x = 1; x < bdWid - 1; x++) {
                     int z = sw1z(x, y);
-                    if (board[z] != 0) continue;            // 既に石がある
-                    if (SetStoneM(z, color) != 0) continue; // 置いてみてエラーなら、次の候補へ
+                    if (board[z] != 0) continue;  // 空点ではないなら、次の座標へ
+                    if (Move(z, color) != 0) continue;  // 置いてみてエラーなら、次の座標へ
 
-                    var win_sum = 0;                        // 勝ち数合計の初期化0
-                    for (int i = 0; i < try_num; i++) {     // playoutを繰り返す
-                        int[] board_cpy2 = new int[boardSize * boardSize];
-                        Array.Copy(board,board_cpy2, board.Length);         // 局面が壊れるので保存
-                        int ko_z_cpy2 = ko_z;               // コウの位置も保存
+                    var win_sum = 0;                    // 勝ち数合計の初期化0
+                    for (int i = 0; i < try_num; i++) {             // playoutを繰り返す
+                        int[] board_cpy2 = new int[bdMax];
+                        Array.Copy(board, board_cpy2, board.Length);// 局面が壊れるので保存
+                        int ko_z_cpy2 = ko_z;                       // コウの位置も保存
 
-                        int win = -PlayOut(3 - color);      // プレイアウト
+                        int win = -PlayOut(3 - color);              // プレイアウト
                         win_sum += win;
                         //DispGoban();  // playoutを打ち切った局面を表示
                         //Console.WriteLine($"win={win},{win_sum}");
-                        Array.Copy(board_cpy2, board, board.Length);    // 局面を戻す
-                        ko_z = ko_z_cpy2;                               // コウも
+                        Array.Copy(board_cpy2, board, board.Length);// 局面を戻す
+                        ko_z = ko_z_cpy2;                           // コウも
                     }
-                    double win_rate = (double)win_sum / try_num;        // 勝率
+                    double win_rate = (double)win_sum / try_num;    // 勝率
                     //DispGoban();
                     //Console.WriteLine($"z=({x},{y}), win={win_rate}");
 
-                    if(win_rate > best_value) {                         // 最善手を更新
+                    if (win_rate > best_value) {                         // 最善手を更新
                         best_value = win_rate;
                         best_z = z;
-                        Console.WriteLine($"best=({sw2z(z)}), v={best_value:F4}, try_num={try_num}");
+                        Console.WriteLine($"best={sw2z(z)}, v={best_value:F4}, try_num={try_num}");
                     }
 
                     Array.Copy(board_copy, board, board.Length);    // 局面を戻す
                     ko_z = ko_z_copy;                               // コウも
-                    prisoner[Black] = pB;                           // アゲハマを戻す
-                    prisoner[White] = pW;                           // アゲハマを戻す
+                    hama[Black] = pB;                           // アゲハマを戻す
+                    hama[White] = pW;                           // アゲハマを戻す
                 }
             }
             return best_z;
@@ -272,15 +378,15 @@ namespace ConsoleIgo
         {
             allPlayOuts++;          // PlayOut関数が呼ばれた回数
             var color = turn_color;
-            var befor_z = -1;          // 一手前の手初期化-1
-            var loop_max = boardSize * boardSize + boardSize * 4;   // 3コウ対策で手数を制限
+            var before_z = -1;          // 一手前の手初期化-1
+            var loop_max = bdWid * bdWid + bdWid * 4;   // 3コウ対策で手数を制限
             for(int loop = 0; loop < loop_max; loop++) {
                 // すべての空点を着手候補にする
-                var kouho = new int[boardSize * boardSize];
+                var kouho = new int[bdMax];
                 var kouho_num = 0;
-                int z;
-                for (int y = 1; y < boardSize - 1; y++) {
-                    for (int x = 1; x < boardSize - 1; x++) {
+                int z = 0;
+                for (int y = 1; y < bdWid - 1; y++) {
+                    for (int x = 1; x < bdWid - 1; x++) {
                         z = sw1z(x, y);
                         if (board[z] != 0) continue;    // 空点以外ならスキップ
                         kouho[kouho_num] = z;           // 空点ならその座標を候補配列に登録
@@ -292,177 +398,103 @@ namespace ConsoleIgo
                     if (kouho_num == 0) {
                         z = 0;   // パス 
                     } else {
-                        r = rand.Next(0, kouho_num - 1) % kouho_num;        // 乱数で一手選ぶ
+                        r = rand.Next() % kouho_num;    // 乱数で一手選ぶ
                         z = kouho[r];
                     }
-                    if (SetStoneM(z, color) == 0)  break;   // 着手可能なので、この手を選ぶ
+                    if (Move(z, color) == 0)  break;    // 着手可能なので、この手を選ぶ
                     //着手不可
-                    kouho[r] = kouho[kouho_num - 1];        // 末尾の手を代入し、この手を削除
+                    kouho[r] = kouho[kouho_num - 1];    // 末尾の手を代入し、この手を削除
                     kouho_num--;
                 }
-                if (z == 0 && befor_z == 0) break;          // 連続パス
-                befor_z = z;
-                //DispGoban();
-                //Console.WriteLine($"loop={loop}, z=({z.X},{z.Y}), c={color}, kouho_num={kouho_num}, ko_z=({ko.X},{ko.Y})");
+                if (z == 0 && before_z == 0) break;     // 連続パス
+                before_z = z;
+                /*
+                DispGoban();
+                Console.WriteLine($"loop={loop}, z=({sw2z(z)}), c={elem}, kouho_num={kouho_num}, ko_z=({sw2z(ko_z)})");
+                Console.ReadLine();
+                */
                 color = 3 - color;          // 手番を入れ替え
             }
-            return CountScoreM(turn_color); // playoutを開始した手番を渡す
+            return CountScoreM(turn_color); // playoutを開始した手番を渡し、勝敗結果を返す
         }
 
         /******************************************************************************/
         // 座標をキー入力
-        static void InputCoordinate(int color, ref Point keyIn)
+        static int DeadStoneCoordinates()
         {
             // 入力指示メッセージ
-            if (endFlag) { Console.WriteLine("\n死んでいる石の座標(x,y)を入力、終了は 99を入力"); }
-            else         { Console.WriteLine(color == Black ? "\n黒番：座標(x,y)を入力" : "\n白番：座標(x,y)を入力");
-                           Console.WriteLine("パスは 0 、投了は 99を入力"); }
+            Console.WriteLine("\n死に石(連)を指定してください。");
+            Console.WriteLine("座標(x,y)を入力、99=終了、0=取消");
+            // 入力ループ
             var str = "";
+            int z, c;
             while (true)
             {
                 Console.Write("x,y : ");
                 str = Console.ReadLine();
-                if (str == null || str.Length == 0) { continue; }
-                if (str == "0" && endFlag == false) { keyIn.X = 0; keyIn.Y = 0; break; }
-                if (str == "99") { keyIn.X = 99; keyIn.Y = 99; break; }
-                if (!str.Contains(',')) { continue; }
-                var sX = str.Split(',')[0];
-                var sY = str.Split(',')[1];
-                if (!int.TryParse(sX, out int x))  continue;  // 整数でなければ再入力
-                if (!int.TryParse(sY, out int y))  continue;  // 整数でなければ再入力
-                if (x < 1 || x > boardSize - 2)    continue;  // 範囲外なら再入力
-                if (y < 1 || y > boardSize - 2)    continue;  // 範囲外なら再入力
-                keyIn.X = x;
-                keyIn.Y = y;
-                break;
+                if (str == null || str.Length == 0) { continue; }   // 未入力なら再入力
+                if (str == "0" && endFlag == false) { z = 0; break; }   // 直前の死に石指定を取り消し：値 0で入力ループを抜ける
+                if (str == "99"                   ) { z = 99; break; }  // 死に石指定を終了：値99で入力ループを抜ける
+                if (!str.Contains(',')            ) { continue; }   // ',' が無ければ再入力
+                var sX = str.Split(',')[0]; // x座標文字
+                var sY = str.Split(',')[1]; // y座標文字
+                if (!int.TryParse(sX, out int x)  ) { continue; }   // 整数でなければ再入力
+                if (!int.TryParse(sY, out int y)  ) { continue; }   // 整数でなければ再入力
+                if (x < 1 || x > bdWid - 2        ) { continue; }   // 範囲外なら再入力
+                if (y < 1 || y > bdWid - 2        ) { continue; }   // 範囲外なら再入力
+                z = sw1z(x, y);
+                c = board[z];
+                if (c == 0                        ) { continue; }   // 座標に石が無ければ再入力
+                break;  // 入力座標に問題無し、ループを抜ける
             }
-        }
-        // 2022.4.27 ここから
-
-        /******************************************************************************/
-        // 合法手か調べる
-        static bool CheckLegal(int color, Point p)
-        {
-            if (board[p.Y, p.X] != Space) { return false; }                             // 空点じゃないと置けない
-            if (move > 1) {                                         
-                if (ko.X == p.X && ko.Y == p.Y && koNum == move - 1) { return false; }  // 一手前にコウを取られていたら置けない
-            }
-            if (CheckSuicide(color, p)) { return false; }                               // 自殺手なら置けない
-
-            // 以上のチェックを通過したので、合法手だが、
-            // 乱数打ちの場合、自分の目を埋める手は禁止しておく
-            if ((board[p.Y, p.X - 1] == color || board[p.Y, p.X - 1] == OutSd) &&
-                (board[p.Y, p.X + 1] == color || board[p.Y, p.X + 1] == OutSd) &&
-                (board[p.Y - 1, p.X] == color || board[p.Y - 1, p.X] == OutSd) &&
-                (board[p.Y + 1, p.X] == color || board[p.Y + 1, p.X] == OutSd))
-            {
-                //// 手数が盤サイズの二乗を超えたら、コウの形を埋めるのはOK
-                //if (move > (boardSize - 1)* (boardSize - 1)) {
-                //    if (KoKaisho(color, p)) return true;// 置けます
-                //}
-                return false;
-            }
-            return true;// 置けます
+            return z;   // 座標zを返す
         }
 
-        /******************************************************************************/
-        // 周囲に解消できるコウがあるか？？
-        private static bool KoKaisho(int color, Point p)
-        {
-            if (KoNoKatati(color, p.X - 1, p.Y)) { return true; } // 左
-            if (KoNoKatati(color, p.X + 1, p.Y)) { return true; } // 右
-            if (KoNoKatati(color, p.X, p.Y - 1)) { return true; } // 上
-            if (KoNoKatati(color, p.X, p.Y + 1)) { return true; } // 下
-            return false;
-        }
+        ///******************************************************************************/
+        //// 周囲に解消できるコウがあるか？？
+        //private static bool KoKaisho(int elem, int z)
+        //{
+        //    if (KoNoKatati(elem, z + dir4[0])) { return true; } // 左
+        //    if (KoNoKatati(elem, z + dir4[1])) { return true; } // 右
+        //    if (KoNoKatati(elem, z + dir4[2])) { return true; } // 上
+        //    if (KoNoKatati(elem, z + dir4[3])) { return true; } // 下
+        //    return false;
+        //}
 
-        /******************************************************************************/
-        // コウの形？
-        private static bool KoNoKatati(int color, int x, int y)
-        {
-            if (board[y, x] == OutSd) return false;
-            // 周囲の 相手石or壁を、カウント＋１
-            for (int i = 0; i < 9; i++) { countMk[i] = 0; }         // カウンタを初期化０
-            countMk[board[y, x + 1]]++;  // 右
-            countMk[board[y - 1, x]]++;  // 上
-            countMk[board[y + 1, x]]++;  // 下
-            countMk[board[y, x - 1]]++;  // 左
+        ///******************************************************************************/
+        //// コウの形？
+        //private static bool KoNoKatati(int elem, int z)
+        //{
+        //    if (board[z] == OutSd) return false;
+        //    // 周囲の 相手石or壁を、カウント＋１
+        //    for (int y = 0; y < 9; y++) { count[y] = 0; }         // カウンタを初期化０
+        //    count[board[z + dir4[0]]]++;  // 左
+        //    count[board[z + dir4[1]]]++;  // 右
+        //    count[board[z + dir4[2]]]++;  // 上
+        //    count[board[z + dir4[3]]]++;  // 下
 
-            // 相手の石と壁で3方向囲まれていれば、コウの形
-            if (countMk[3 - color] + countMk[OutSd] == 3) {
-                return true; 
-            }
-            return false;
-        }
-
-        /******************************************************************************/
-        // 自殺手か調べる
-        static bool CheckSuicide(int color, Point p)
-        {
-            int opponentColor;              // 相手の色
-            board[p.Y, p.X] = color;        // 仮に石を置く
-
-            InitCheckCountArry();         // チェック用碁盤と、要素カウンタを初期化
-            if (CheckRen( p.X, p.Y, color, color)) // 囲まれているなら自殺手かもしれない
-            {
-                opponentColor = 3 - color;  // 相手の色
-
-                if (board[p.Y, p.X - 1] == opponentColor) {     // 右隣が相手の石
-                    InitCheckCountArry();
-                    if (CheckRen( p.X - 1, p.Y, opponentColor, opponentColor)) {
-                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
-                        return false;               // その石を取れるなら自殺手ではない
-                    }
-                }
-
-                if (board[p.Y, p.X + 1] == opponentColor) {     // 左隣が相手の石
-                    InitCheckCountArry();
-                    if (CheckRen( p.X + 1, p.Y, opponentColor, opponentColor)) {
-                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
-                        return false;               // その石を取れるなら自殺手ではない
-                    }
-                }
-
-                if (board[p.Y - 1, p.X] == opponentColor) {     // 上隣が相手の石
-                    InitCheckCountArry();
-                    if (CheckRen( p.X, p.Y - 1, opponentColor, opponentColor)) {
-                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
-                        return false;               // その石を取れるなら自殺手ではない
-                    }
-                }
-
-                if (board[p.Y + 1, p.X] == opponentColor) {     // 下隣が相手の石
-                    InitCheckCountArry();
-                    if (CheckRen( p.X, p.Y + 1, opponentColor, opponentColor)) {
-                        board[p.Y, p.X] = Space;    // 仮石を元に戻す
-                        return false;               // その石を取れるなら自殺手ではない
-                    }
-                }
-
-                board[p.Y, p.X] = Space;    // 仮石を元に戻す
-                return true;                // 相手の石を取れないので、自殺手になる
-            }
-            else {
-                board[p.Y, p.X] = Space;    // 仮石を元に戻す
-                return false;               // 囲まれていないので、自殺手ではない
-            }
-        }
+        //    // 相手の石と壁で3方向囲まれていれば、コウの形
+        //    if (count[3 - elem] + count[OutSd] == 3) {
+        //        return true; 
+        //    }
+        //    return false;
+        //}
 
         /******************************************************************************/
         // チェック配列とカウンタ配列の初期化
         private static void InitCheckCountArry()
         {
             Array.Clear(check, 0, check.Length);
-            Array.Clear(countMk, 0, countMk.Length);
+            Array.Clear(count, 0, count.Length);
         }
 
         /******************************************************************************/
         //  囲碁プログラムの為の多機能再帰関数（1次元化配列用）
         /// <summary>
         /// <para>座標(x,y)の連を elem1 から elem2 に置き換える。</para>
-        /// <para>連の要素数が countMk [ elem1 ] に入る。</para>
-        /// <para>連周囲の各要素数が countMk [ 交点の要素No. ] に入る。</para>
-        /// <para>フィールド変数は、 board[,] check[,] countMk[] 交点マーク要素No が必要。</para>
+        /// <para>連の要素数が count [ elem1 ] に入る。</para>
+        /// <para>連周囲の各要素数が count [ 交点の要素No. ] に入る。</para>
+        /// <para>フィールド変数は、 board[,] check[,] count[] 交点マーク要素No が必要。</para>
         /// </summary>
         /// <param name="tz">連の一座標</param>
         /// <param name="elem1">連の構成要素</param>
@@ -477,72 +509,64 @@ namespace ConsoleIgo
             for (int i = 0; i < 4; i++) {
                 var z = tz + dir4[i];
                 // 隣が連の要素ではなく、且つ 未チェック なら、各要素カウンタを＋１  周囲チェック済み(-1)とする
-                if (board[z] != elem1 && check[z] == 0) { countMk[board[z]]++; check[z] = -1; }
+                if (board[z] != elem1 && check[z] == 0) { count[board[z]]++; check[z] = -1; }
             }
             // 連要素をelem2にして、連カウンタを＋１、連チェック済み(elem1+1) ※elem1=空点(0値)でもチェック済みになるように+1）
-            board[tz] = elem2; countMk[elem1]++; check[tz] = elem1 + 1;
+            board[tz] = elem2; count[elem1]++; check[tz] = elem1 + 1;
             // 隣を調べる為に、再帰呼び出し
             for (int i = 0; i < 4; i++) { CheckRen(tz + dir4[i], elem1, elem2); }
             // 戻り値
-            return countMk[Space] == 0;         // true(空点無) | false(空点有)
+            return count[Space] == 0;         // true(空点無) | false(空点有)
         }
 
         /******************************************************************************/
         // 勝敗の判定、
         static int CountScore(int turn_color)
         {
-            int score = 0;              //*******************
-            int[] kind = new int[10];    // 盤上に残っている石数
+            //int score = 0;
+            //int[] kind = new int[10];   // 盤上に残っている石数
             int bScore = 0;
             int wScore = 0;
 
-            DeadStones();   // 盤上の死に石を指定し、数をアゲハマへ追加する
+            SpecifyDeadStones();   // 盤上の死に石を指定し、数をアゲハマへ追加する
             // 死に石を消す
-            for (int y = 1; y < boardSize - 1; y++) {
-                for (int x = 1; x < boardSize - 1; x++) {
-                    if (board[y, x] == 4 || board[y, x] == 5) { board[y, x] = Space; }
+            for (int y = 1; y < bdWid - 1; y++) {
+                for (int x = 1; x < bdWid - 1; x++) {
+                    var z = sw1z(x, y);
+                    if (board[z] == BDead || board[z] == WDead) { board[z] = Space; }
                 } 
             }
             DispGoban();
 
             // 陣地を数える
-            for (int y = 1; y < boardSize - 1; y++)
-            {
-                for (int x = 1; x < boardSize - 1; x++)
-                {
-                    int c = board[y, x];
-                    kind[c]++;
-                    if (board[y, x] != Space) { continue; } // 空点でなければスキップ
-                    // 空点なら以下の処理
+            for (int y = 1; y < bdWid - 1; y++) {
+                for (int x = 1; x < bdWid - 1; x++) {
+                    var z = sw1z(x, y);
+                    int c = board[z];
+                    //kind[c]++;
+                    if (board[z] != Space) { continue; }    // 空点でなければスキップ
+                    // 以下、空点の処理
                     InitCheckCountArry();                   // カウンタを初期化０
-                    CheckRen(x, y, Space, XDame);           // 連空点の数と周囲要素のカウント
-                    if (countMk[Black] > 0 && countMk[White] == 0) {   // 黒石だけに囲まれている
-                        bScore += countMk[Space];
-                        score += countMk[Space];
-                        //InitCheckCountArry(); CheckRen(x, y, XDame, BArea);
+                    CheckRen(z, Space, XDame);                  // 連空点の数と周囲要素のカウント
+                    if (count[Black] > 0 && count[White] == 0) {   // 黒石だけに囲まれている
+                        bScore += count[Space];
+                        //score += count[Space];
                     }
-                    if (countMk[White] > 0 && countMk[Black] == 0) {   // 白石だけに囲まれている
-                        wScore += countMk[Space];
-                        score -= countMk[Space];
-                        //InitCheckCountArry(); CheckRen(x, y, XDame, WArea);
+                    if (count[White] > 0 && count[Black] == 0) {   // 白石だけに囲まれている
+                        wScore += count[Space];
+                        //score -= count[Space];
                     }
                 }
             }
-            score += (kind[Black] - kind[White]);
-            double final_score = score - komi;
+
             DispGoban();
-            int win = 0;
-            if (final_score > 0) win = 1;           // 黒が勝っていれば  1
-            if (turn_color == White) win = -win;    // 白が勝っていれば -win
             Console.WriteLine("------結果-------");
-            Console.WriteLine($"黒地{bScore}+黒浜{prisoner[Black]}");
-            Console.WriteLine($"白地{wScore}+白浜{prisoner[White]}+コミ{komi}.5");
+            Console.WriteLine($"黒地{bScore}+黒浜{hama[Black]}");
+            Console.WriteLine($"白地{wScore}+白浜{hama[White]}+コミ{komi}.5");
 
-            bScore += prisoner[Black];
-            wScore += prisoner[White] + komi;
+            bScore += hama[Black];
+            wScore += hama[White] + komi;
             return bScore - wScore;
-
-            //return (int) final_score * win;
         }
 
         /******************************************************************************/
@@ -551,27 +575,22 @@ namespace ConsoleIgo
         {
             int score = 0;
             int[] kind = new int[3];    // 盤上に残っている石数
-
             // 陣地を数える
-            for (int y = 1; y < boardSize - 1; y++)
-            {
-                for (int x = 1; x < boardSize - 1; x++)
-                {
-                    int c = board[y, x];
-                    kind[c]++;
-                    if (c != 0) continue;   // 空点でなければスキップ
+            for (int y = 1; y < bdWid - 1; y++) {
+                for (int x = 1; x < bdWid - 1; x++) {
+                    var z = sw1z(x, y);
+                    int c = board[z];
+                    kind[c]++;          // 色別に石数をカウント
+                    if (c != 0) continue;   // 空点でなければ次の座標へ
                     // 空点なら以下の処理
                     int[] mk = new int[4];  // 4方向の石を種類別に数える
-                    mk[board[y, x - 1]]++;
-                    mk[board[y, x + 1]]++;
-                    mk[board[y - 1, x]]++;
-                    mk[board[y + 1, x]]++;
+                    for (int i = 0; i < 4; i++) { mk[board[z + dir4[i]]]++; }
                     if (mk[Black] > 0 && mk[White] == 0) score++;   // 黒だけに囲まれているので黒地
                     if (mk[White] > 0 && mk[Black] == 0) score--;   // 白だけに囲まれているので白地
                 }
             }
-            score += (kind[Black] - kind[White]);
-            double final_score = score - komi;
+            score += (kind[Black] - kind[White]);   // 地差に盤上の石数の差を加える
+            double final_score = score - komi - 0.5;
             int win = 0;
             if (final_score > 0) win = 1;           // 黒が勝っていれば  1
             if (turn_color == White) win = -win;    // 白が勝っていれば -1
@@ -580,182 +599,108 @@ namespace ConsoleIgo
 
         /******************************************************************************/
         // 死に石を指定
-        static void DeadStones()
+        static void SpecifyDeadStones()
         {
-            int color;
-            Point p = new Point();
+            int z;
+            int c = 0;
             while (true)
             {
                 // 死に石の座標をキー入力
-                InputCoordinate(OutSd, ref p);
-                if (p.X == 99) { break; }
-                color = board[p.Y, p.X];
-                if (!(color == Black || color == White)) { continue; }// 座標に石が無かったら再入力
-
-                // 死に石のカウントとマークキング
-                InitCheckCountArry(); 
-                CheckRen(p.X, p.Y, color, color + 3);
-                prisoner[3 - color] += countMk[color];
-
-                DispGoban();        // 碁盤表示
-            }
-        }
-
-        /******************************************************************************/
-        // 碁盤に石を置く
-        static void SetStone(int color, ref Point p)
-        {
-            var oppColor = 3 - color;           // 相手の色
-            bool koFlag = false;
-            board[p.Y, p.X] = color;            // 座標に石を置く
-            // 置いた石の4方向隣に同じ色の石があるか？
-            if (board[p.Y + 1, p.X] != color &&
-                board[p.Y - 1, p.X] != color &&
-                board[p.Y, p.X + 1] != color &&
-                board[p.Y, p.X - 1] != color) {
-                // 同じ色の石が無いならコウかもしれない
-                koFlag = true;  
-            } else {
-                koFlag = false; // コウではない
-            }
-            //   左のアゲハマ 、 右のアゲハマ 、 上のアゲハマ 、 下のアゲハマ
-            int prisonerW = 0, prisonerE = 0, prisonerN = 0, prisonerS = 0;
-            // 隣の相手の連が死んでいれば、碁盤から取り除く
-            InitCheckCountArry();             // 左
-            if (CheckRen(p.X - 1, p.Y, oppColor, Space)) prisonerW = countMk[oppColor];
-            else RestoreBoard();
-            InitCheckCountArry();             // 右
-            if (CheckRen( p.X + 1, p.Y, oppColor, Space)) prisonerE = countMk[oppColor];
-            else RestoreBoard();
-            InitCheckCountArry();             // 上
-            if (CheckRen( p.X, p.Y - 1, oppColor, Space)) prisonerN = countMk[oppColor];
-            else RestoreBoard();
-            InitCheckCountArry();             // 下
-            if (CheckRen( p.X, p.Y + 1, oppColor, Space)) prisonerS = countMk[oppColor];
-            else RestoreBoard();
-
-            // 取り除かれた石の合計
-            int prisonerAll = prisonerW + prisonerE + prisonerN + prisonerS;
-
-            // 置いた石の隣に同じ色の石が無く、取り除かれた石が１つだけなら、コウ！
-            if (koFlag == true && prisonerAll == 1) {
-                koNum = move; // コウが発生した手数を記録、コウの座標を記録
-                     if (prisonerW == 1) { ko.X = p.X - 1; ko.Y = p.Y; }
-                else if (prisonerE == 1) { ko.X = p.X + 1; ko.Y = p.Y; }
-                else if (prisonerN == 1) { ko.X = p.X; ko.Y = p.Y - 1; }
-                else if (prisonerS == 1) { ko.X = p.X; ko.Y = p.Y + 1; }
-            }
-
-            // アゲハマの更新
-            prisoner[color] += prisonerAll;
-            //Console.WriteLine($"アゲハマ：{prisonerAll}(合計：{prisoner[color]})");
-        }
-
-        /******************************************************************************/
-        // 碁盤に石を置く // モンテカルロ用
-        private static int SetStoneM(int tz, int color)
-        {
-            if (tz == 0) { ko_z = 0; return 0; } // パスの場合
-
-            var around = new int[4, 3]; // 4方向の ダメ数、石数、色
-            var oppCol = 3 - color;     // 相手の石色
-            var ct = new int[4];        // 4方向の空点の数 ct[Space] // 周囲の壁の数 ct[OutSd]
-            var mikata_safe = 0;        // 空点2以上の味方の数
-            var take_sum = 0;           // 取れる石の合計
-            var ko_kamo = 0;            // コウかもしれない場所
-            for(int i = 0; i < 4; i++) {    // 4方向の石の空点と石数をしらべる
-                around[i, 0] = around[i, 1] = around[i, 2] = 0;
-                var z = tz + dir4[i];   // 隣の座標
-                var c = board[z];       // 隣の状態
-                ct[c]++;                // 空点、壁 をカウント
-                if (c == Space || c == OutSd) continue;
-
-                InitCheckCountArry(); 
-                CheckRen(z, c, c);
-                around[i, 0] = countMk[Space];  // 空点の数
-                around[i, 1] = countMk[c];      // 連の石数
-                around[i, 2] = c;               // 連の石色
-                if (c == oppCol && countMk[Space] == 1) { take_sum += countMk[c]; ko_kamo = z; }
-                if (c == color && countMk[Space] >= 2) { mikata_safe++; }
-            }
-            if (take_sum    == 0 &&
-                ct[Space]   == 0 &&
-                mikata_safe == 0            ) return 1; // 自殺手
-            if (tz == ko_z                  ) return 2; // コウ
-            if (ct[OutSd] + mikata_safe == 4) return 3; // 一眼(ルール違反ではないが置かない)
-            if (board[tz] != 0              ) return 4; // 既に石がある
-            // 以上をクリアしたので、座標tzは合法な空点(石を置ける)
-            for (int i = 0; i < 4; i++) {
-                var ctSpace = around[i, 0];
-                var ctIshi = around[i, 1];
-                var col     = around[i, 2];
-                if (col == oppCol && ctSpace == 1 && board[tz + dir4[i]] != 0) {
-                    kesu(tz + dir4[i], oppCol);
-                    prisoner[color] += ctIshi;
+                z = DeadStoneCoordinates();
+                if (z == 99) { break; }         // 指定終了
+                if (z == 0 && (c == Black || c == White)) { // 直前の死に石指定の取消
+                    hama[3 - c] -= count[c];    // 死に石指定前のアゲハマ数に戻す
+                    RestoreBoard();             // 死に石指定前の盤面に戻す
+                    InitCheckCountArry();
+                    DispGoban(); 
+                    c = 0;
+                    continue;
                 }
-            }
-            board[tz] = color;  // 石を置く
-            InitCheckCountArry();
-            CheckRen(tz, color, color);
-            if (take_sum == 1 && countMk[color] == 1 && countMk[Space] == 1) {
-                ko_z = ko_kamo;
-            } else {
-                ko_z = 0; 
-            }
-            return 0;
-        }
-
-        /******************************************************************************/
-        // 石を消す // モンテカルロ用
-        private static void kesu(int tz, int color)
-        {
-            board[tz] = 0;
-            for (int i = 0; i < 4; i++) {
-                if (tz + dir4[i] == color) kesu(tz + dir4[i], color);
+                c = board[z];
+                if (c == Black || c == White) {     // 黒か白の石だった場合
+                    // 死に石のカウントとマーキング
+                    InitCheckCountArry();
+                    CheckRen(z, c, c + 5);
+                    hama[3 - c] += count[c];        // 死に石数をアゲハマに追加
+                }
+                else if (c == BDead || c == WDead) {     // 死マーク済みの石だった場合
+                    // 死に石のカウントとマーキングの取消
+                    InitCheckCountArry();
+                    CheckRen(z, c, c - 5);
+                    hama[3 - (c - 5)] -= count[c];  // 死に石指定前のアゲハマ数に戻す
+                }
+                DispGoban();        // 死に石指定中の盤面表示
             }
         }
 
         /******************************************************************************/
-        // 盤面を元に戻す
+        // 盤面を前の状態に戻す
         private static void RestoreBoard()
         {
-            for (int y = 0; y < boardSize - 1; y++) {
-                for (int x = 0; x < boardSize - 1; x++) {
-                    if (check[y, x] > 0) board[y, x] = check[y, x] - 1;
-                }
+            for(int z = 0; z < bdMax; z++) {
+                if (check[z] > 0) { board[z] = check[z] - 1; }
             }
+                    Array.Clear(check, 0, check.Length);
         }
 
         /******************************************************************************/
-        // 棋譜に記録
-        static void RecordMove(int color, Point p)
+        /// <summary>
+        /// 石を消す、再帰関数
+        /// </summary>
+        private static void KeSu(int z, ref int color)
         {
-            KiFu kifu = new KiFu() { Col = color, Poi = p };
-            kifuLog.Add(kifu);
+            // この座標の石を消す
+            board[z] = Space;
+            // 隣の石が  　同じ色    なら  再帰で消す
+            if (board[z + dL] == color) KeSu(z + dL, ref color);  // 左
+            if (board[z + dR] == color) KeSu(z + dR, ref color);  // 右
+            if (board[z + dU] == color) KeSu(z + dU, ref color);  // 上
+            if (board[z + dD] == color) KeSu(z + dD, ref color);  // 下
         }
 
         /******************************************************************************/
-        // 思考エンジン（ランダムな ｘ、ｙ）
-        static void RandomXY(int color, ref Point p)
+        // 1次元用、チェック配列とカウンタ配列の初期化
+        private static void ClearCheckCount()
         {
-            // すべての空点を調べ、合法な空点が無ければ、パス
-            var countM = 0; // 合法な（石を置くことが可能な）空点をカウントする変数
-            for (int i = 1; i < boardSize - 1; i++) for (int j = 1; j < boardSize - 1; j++)
-                {
-                    if (board[i, j] != Space) continue; // 空点以外はスキップ
-                    // 空点なら以下
-                    p.X = j; p.Y = i;
-                    if (CheckLegal(color, p)) countM++; // 合法ならカウント＋１
-                }
-            if(countM > 0) { 
-                // 置ける空点がある
-                p.X = rand.Next(1, boardSize - 1);
-                p.Y = rand.Next(1, boardSize - 1);
-            }
-            else
-            {   // 置ける空点が無い
-                p.X = 0; p.Y = 0;                   // パス
-            }
+            Array.Clear(check, 0, check.Length);
+            Array.Clear(count, 0, count.Length);
         }
+
+        ///******************************************************************************/
+        //// 盤面を元に戻す
+        //private static void RestoreBoard()
+        //{
+        //    for (int y = 0; y < bdWid - 1; y++) {
+        //        for (int x = 0; x < bdWid - 1; x++) {
+        //            var z = sw1z(x, y);
+        //            if (check[z] > 0) board[z] = check[z] - 1;
+        //        }
+        //    }
+        //}
+
+        ///******************************************************************************/
+        //// 思考エンジン（ランダムな ｘ、ｙ）
+        //static void RandomXY(int elem, ref Point p)
+        //{
+        //    // すべての空点を調べ、合法な空点が無ければ、パス
+        //    var countM = 0; // 合法な（石を置くことが可能な）空点をカウントする変数
+        //    for (int y = 1; y < bdWid - 1; y++) for (int j = 1; j < bdWid - 1; j++)
+        //        {
+        //            var z = sw1z(j, y);
+        //            if (board[z] != Space) continue;    // 空点以外はスキップ
+        //            // 空点なら以下
+        //            p.X = j; p.Y = y;
+        //            if (CheckLegal(elem, z)) countM++; // 合法ならカウント＋１
+        //        }
+        //    if(countM > 0) { 
+        //        // 置ける空点がある
+        //        p.X = rand.Next(1, bdWid - 1);
+        //        p.Y = rand.Next(1, bdWid - 1);
+        //    }
+        //    else
+        //    {   // 置ける空点が無い
+        //        p.X = 0; p.Y = 0;                   // パス
+        //    }
+        //}
     }
 }
